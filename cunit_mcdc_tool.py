@@ -1017,7 +1017,7 @@ def render_html_report(report: dict[str, Any]) -> str:
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <title>MC/DC 娴嬭瘯鎶ュ憡</title>
+  <title>MC/DC 测试报告</title>
   <style>
     body {{ font-family: "Segoe UI", Arial, sans-serif; margin: 24px; color: #20242a; }}
     h1, h2 {{ margin: 0 0 12px; }}
@@ -1037,55 +1037,54 @@ def render_html_report(report: dict[str, Any]) -> str:
   </style>
 </head>
 <body>
-  <h1>MC/DC 娴嬭瘯鎶ュ憡</h1>
-  <p>宸ョ▼锛?code>{html.escape(str(report.get("project_root", "")))}</code></p>
-  <p>娴嬭瘯鏂囦欢锛?code>{html.escape(str(report.get("test_output", "")))}</code></p>
+  <h1>MC/DC 测试报告</h1>
+  <p>工程：<code>{html.escape(str(report.get("project_root", "")))}</code></p>
+  <p>测试文件：<code>{html.escape(str(report.get("test_output", "")))}</code></p>
 
   <div class="grid">
-    <div class="card"><div class="label">鍒ゅ畾鏁伴噺</div><div class="value">{len(decisions)}</div></div>
-    <div class="card"><div class="label">鍑芥暟鏁伴噺</div><div class="value">{len(functions)}</div></div>
-    <div class="card"><div class="label">琛岃鐩栫巼</div><div class="value">{pct("lines_executed_percent")}</div></div>
-    <div class="card"><div class="label">鍒嗘敮瑕嗙洊鐜?/div><div class="value">{pct("branches_executed_percent")}</div></div>
-    <div class="card"><div class="label">鍒嗘敮鑷冲皯鎵ц涓€娆?/div><div class="value">{pct("branches_taken_at_least_once_percent")}</div></div>
+    <div class="card"><div class="label">判定数量</div><div class="value">{len(decisions)}</div></div>
+    <div class="card"><div class="label">函数数量</div><div class="value">{len(functions)}</div></div>
+    <div class="card"><div class="label">行覆盖率</div><div class="value">{pct("lines_executed_percent")}</div></div>
+    <div class="card"><div class="label">分支覆盖率</div><div class="value">{pct("branches_executed_percent")}</div></div>
+    <div class="card"><div class="label">分支至少执行一次</div><div class="value">{pct("branches_taken_at_least_once_percent")}</div></div>
   </div>
 
-  <h2>娴佺▼鐘舵€?/h2>
+  <h2>流程状态</h2>
   <table>
-    <tr><th>闃舵</th><th>鐘舵€?/th></tr>
-    <tr><td>鏋勫缓</td><td class="{build_status}">{build_status}</td></tr>
-    <tr><td>娴嬭瘯</td><td class="{test_status}">{test_status}</td></tr>
-    <tr><td>瑕嗙洊鐜囬噰闆?/td><td class="{coverage_status}">{coverage_status}</td></tr>
+    <tr><th>阶段</th><th>状态</th></tr>
+    <tr><td>构建</td><td class="{build_status}">{build_status}</td></tr>
+    <tr><td>测试</td><td class="{test_status}">{test_status}</td></tr>
+    <tr><td>覆盖率采集</td><td class="{coverage_status}">{coverage_status}</td></tr>
   </table>
 
-  <h2>MC/DC 鍒ゅ畾涓庝箟鍔?/h2>
-  <div class="note">琛岃鐩栧拰鍒嗘敮瑕嗙洊涓嶈兘鍗曠嫭璇佹槑 MC/DC銆傝纭姣忎釜鏉′欢閮芥湁鐙珛褰卞搷鍒ゅ畾缁撴灉鐨勬祴璇曞銆?/div>
+  <h2>MC/DC 判定与义务</h2>
+  <div class="note">行覆盖和分支覆盖不能单独证明 MC/DC。请确认每个条件都有独立影响判定结果的测试对。</div>
   <table>
-    <tr><th>鏂囦欢</th><th>琛?/th><th>鍒ゅ畾琛ㄨ揪寮?/th><th>鏉′欢鏁?/th><th>闇€纭鐨勬潯浠?/th></tr>
+    <tr><th>文件</th><th>行</th><th>判定表达式</th><th>条件数</th><th>需确认的条件</th></tr>
     {"".join(rows)}
   </table>
 
-  <h2>鍑芥暟绾ф祴璇曟枃浠?/h2>
+  <h2>函数级测试文件</h2>
   <p>Runner: <code>{html.escape(str(function_manifest.get("runner_output", "")))}</code></p>
   <table>
-    <tr><th>鐢熸垚鐨勬祴璇曟枃浠?/th><th>娉ㄥ唽鍑芥暟</th><th>鍑芥暟鏁?/th></tr>
-    {"".join(generated_rows) if generated_rows else "<tr><td colspan='3'>鏈敓鎴愬嚱鏁扮骇娴嬭瘯鏂囦欢</td></tr>"}
+    <tr><th>生成的测试文件</th><th>注册函数</th><th>函数数</th></tr>
+    {"".join(generated_rows) if generated_rows else "<tr><td colspan='3'>未生成函数级测试文件</td></tr>"}
   </table>
 
-  <h2>鍙戠幇鐨勫嚱鏁?/h2>
+  <h2>发现的函数</h2>
   <table>
-    <tr><th>鏂囦欢</th><th>鍑芥暟</th><th>琛屽彿</th><th>static</th><th>鍒ゅ畾鏁?/th></tr>
-    {"".join(function_rows) if function_rows else "<tr><td colspan='5'>鎶ュ憡涓病鏈夊嚱鏁颁俊鎭?/td></tr>"}
+    <tr><th>文件</th><th>函数</th><th>行号</th><th>static</th><th>判定数</th></tr>
+    {"".join(function_rows) if function_rows else "<tr><td colspan='5'>报告中没有函数信息</td></tr>"}
   </table>
 
-  <h2>鏈鐩栬鏍蜂緥</h2>
+  <h2>未覆盖行样本</h2>
   <table>
-    <tr><th>GCOV 鏂囦欢</th><th>鍐呭</th></tr>
-    {"".join(uncovered_rows) if uncovered_rows else "<tr><td colspan='2'>鏈彂鐜版牱渚嬫垨鏈敓鎴?.gcov 鏂囦欢</td></tr>"}
+    <tr><th>GCOV 文件</th><th>内容</th></tr>
+    {"".join(uncovered_rows) if uncovered_rows else "<tr><td colspan='2'>未发现样本或未生成 .gcov 文件</td></tr>"}
   </table>
 </body>
 </html>
 """
-
 
 def summarize_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     summarized = []

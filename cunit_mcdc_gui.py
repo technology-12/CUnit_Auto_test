@@ -667,14 +667,21 @@ class App(tk.Tk):
 
 
 def format_report_summary(report: dict[str, Any]) -> str:
+    coverage = report.get("coverage_summary", {})
+
     def pct(key: str) -> str:
-        value = report.get(key)
+        value = coverage.get(key)
         if isinstance(value, (int, float)):
             return f"{value:.1f}%"
-        return str(value)
+        return "N/A"
 
-    def status(key: str) -> str:
-        return "PASS" if report.get(key) else "FAIL"
+    def group_status(results_key: str) -> str:
+        results = report.get(results_key, [])
+        if not results:
+            return "SKIPPED"
+        if any(item.get("returncode", 1) != 0 for item in results):
+            return "FAIL"
+        return "PASS"
 
     lines = [
         f"Project: {report.get('project_root', '')}",
@@ -682,19 +689,20 @@ def format_report_summary(report: dict[str, Any]) -> str:
         f"Functions: {report.get('function_count', 0)}",
         "",
         "--- Build ---",
-        f"  Status: {status('build_ok')}",
+        f"  Status: {group_status('build_results')}",
     ]
     for item in report.get("build_results", []):
         lines.append(f"  $ {item.get('command', '')} [exit={item.get('returncode', '?')}]")
     lines.append("")
     lines.append("--- Test ---")
-    lines.append(f"  Status: {status('test_ok')}")
+    lines.append(f"  Status: {group_status('test_results')}")
     for item in report.get("test_results", []):
         lines.append(f"  $ {item.get('command', '')} [exit={item.get('returncode', '?')}]")
     lines.append("")
     lines.append("--- Coverage ---")
-    lines.append(f"  Lines: {pct('lines')}")
-    lines.append(f"  Branches: {pct('branches')}")
+    lines.append(f"  Lines: {pct('lines_executed_percent')}")
+    lines.append(f"  Branches: {pct('branches_executed_percent')}")
+    lines.append(f"  Taken at least once: {pct('branches_taken_at_least_once_percent')}")
     for item in report.get("coverage_results", []):
         lines.append(f"  $ {item.get('command', '')} [exit={item.get('returncode', '?')}]")
     lines.append("")
