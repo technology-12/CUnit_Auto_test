@@ -1,0 +1,476 @@
+{
+  "project_root": "C:\\Users\\YUAN\\Documents\\Codex\\2026-06-07\\python-c-cunit-mc-dc\\outputs\\work",
+  "function_count": 14,
+  "generated_files": [
+    {
+      "path": "C:\\Users\\YUAN\\Documents\\Codex\\2026-06-07\\python-c-cunit-mc-dc\\outputs\\work\\tests\\auto_function_tests\\test__1_src_main_print_result_clamp.c",
+      "register_function": "register__1_src_main_print_result_clamp_tests",
+      "functions": [
+        {
+          "file": "src\\main.c",
+          "name": "print_result",
+          "signature": "#include <stdio.h> #include \"\" #include \"\" #include \"\" static void print_result(const char *label, int value)",
+          "start_line": 6,
+          "end_line": 8,
+          "is_static": true,
+          "decisions": [],
+          "function_body": "{ printf(\"\", label, value); }",
+          "called_functions": [
+            "printf"
+          ],
+          "used_structs": [],
+          "used_macros": [],
+          "required_headers": [
+            "<stdio.h>"
+          ]
+        },
+        {
+          "file": "src\\main.c",
+          "name": "clamp",
+          "signature": "int clamp(int value, int low, int high)",
+          "start_line": 10,
+          "end_line": 18,
+          "is_static": false,
+          "decisions": [
+            {
+              "file": "src\\main.c",
+              "line": 11,
+              "expression": "value < low",
+              "conditions": [
+                "value < low"
+              ]
+            },
+            {
+              "file": "src\\main.c",
+              "line": 14,
+              "expression": "value > high",
+              "conditions": [
+                "value > high"
+              ]
+            }
+          ],
+          "function_body": "{ if (value < low) { return low; } if (value > high) { return high; } return value; }",
+          "called_functions": [],
+          "used_structs": [],
+          "used_macros": [],
+          "required_headers": [
+            "<stdio.h>"
+          ]
+        },
+        {
+          "file": "src\\main.c",
+          "name": "main",
+          "signature": "int main(void)",
+          "start_line": 20,
+          "end_line": 47,
+          "is_static": false,
+          "decisions": [],
+          "function_body": "{ print_result(\"\", add(3, 5)); print_result(\"\", subtract(10, 4)); print_result(\"\", multiply(6, 7)); Result dr = divide(10, 3); printf(\"\", dr.quotient, dr.remainder, dr.error); print_result(\"\", factorial(5)); print_result(\"\", max_of_three(7, 2, 9)); print_result(\"\", classify_number(2)); print_result(\"\", power(2, 8)); print_result(\"\", str_length(\"\")); print_result(\"\", str_compare(\"\", \"\")); const char *found = find_char(\"\", ''); printf(\"\", found ? found : \"\"); print_result(\"\", clamp(5, 0, 10)); print_result(\"\", clamp(50, 0, 10)); return SUCCESS; }",
+          "called_functions": [
+            "add",
+            "clamp",
+            "classify_number",
+            "divide",
+            "factorial",
+            "find_char",
+            "max_of_three",
+            "multiply",
+            "power",
+            "print_result",
+            "printf",
+            "str_compare",
+            "str_length",
+            "subtract"
+          ],
+          "used_structs": [],
+          "used_macros": [
+            "SUCCESS"
+          ],
+          "required_headers": [
+            "<stdio.h>"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "C:\\Users\\YUAN\\Documents\\Codex\\2026-06-07\\python-c-cunit-mc-dc\\outputs\\work\\tests\\auto_function_tests\\test__2_src_math_ops_add_subtract.c",
+      "register_function": "register__2_src_math_ops_add_subtract_tests",
+      "functions": [
+        {
+          "file": "src\\math_ops.c",
+          "name": "add",
+          "signature": "#include \"\" #include <stdlib.h> int add(int a, int b)",
+          "start_line": 4,
+          "end_line": 6,
+          "is_static": false,
+          "decisions": [],
+          "function_body": "{ return a + b; }",
+          "called_functions": [],
+          "used_structs": [],
+          "used_macros": [],
+          "required_headers": [
+            "<stdlib.h>"
+          ]
+        },
+        {
+          "file": "src\\math_ops.c",
+          "name": "subtract",
+          "signature": "int subtract(int a, int b)",
+          "start_line": 8,
+          "end_line": 10,
+          "is_static": false,
+          "decisions": [],
+          "function_body": "{ return a - b; }",
+          "called_functions": [],
+          "used_structs": [],
+          "used_macros": [],
+          "required_headers": [
+            "<stdlib.h>"
+          ]
+        },
+        {
+          "file": "src\\math_ops.c",
+          "name": "multiply",
+          "signature": "int multiply(int a, int b)",
+          "start_line": 12,
+          "end_line": 14,
+          "is_static": false,
+          "decisions": [],
+          "function_body": "{ return a * b; }",
+          "called_functions": [],
+          "used_structs": [],
+          "used_macros": [],
+          "required_headers": [
+            "<stdlib.h>"
+          ]
+        },
+        {
+          "file": "src\\math_ops.c",
+          "name": "divide",
+          "signature": "Result divide(int a, int b)",
+          "start_line": 17,
+          "end_line": 27,
+          "is_static": false,
+          "decisions": [
+            {
+              "file": "src\\math_ops.c",
+              "line": 19,
+              "expression": "b == 0",
+              "conditions": [
+                "b == 0"
+              ]
+            }
+          ],
+          "function_body": "{ Result result = {0, 0, 0}; if (b == 0) { result.error = ERROR_ZERO; return result; } result.quotient = a / b; result.remainder = a % b; result.error = SUCCESS; return result; }",
+          "called_functions": [],
+          "used_structs": [],
+          "used_macros": [
+            "ERROR_ZERO",
+            "SUCCESS"
+          ],
+          "required_headers": [
+            "<stdlib.h>"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "C:\\Users\\YUAN\\Documents\\Codex\\2026-06-07\\python-c-cunit-mc-dc\\outputs\\work\\tests\\auto_function_tests\\test__3_src_math_ops_factorial_max_of_three.c",
+      "register_function": "register__3_src_math_ops_factorial_max_of_three_tests",
+      "functions": [
+        {
+          "file": "src\\math_ops.c",
+          "name": "factorial",
+          "signature": "int factorial(int n)",
+          "start_line": 30,
+          "end_line": 39,
+          "is_static": false,
+          "decisions": [
+            {
+              "file": "src\\math_ops.c",
+              "line": 31,
+              "expression": "n < 0",
+              "conditions": [
+                "n < 0"
+              ]
+            },
+            {
+              "file": "src\\math_ops.c",
+              "line": 35,
+              "expression": "i <= n",
+              "conditions": [
+                "i <= n"
+              ]
+            }
+          ],
+          "function_body": "{ if (n < 0) { return ERROR_NEGATIVE; } int result = 1; for (int i = 1; i <= n; i++) { result *= i; } return result; }",
+          "called_functions": [],
+          "used_structs": [],
+          "used_macros": [
+            "ERROR_NEGATIVE"
+          ],
+          "required_headers": [
+            "<stdlib.h>"
+          ]
+        },
+        {
+          "file": "src\\math_ops.c",
+          "name": "max_of_three",
+          "signature": "int max_of_three(int a, int b, int c)",
+          "start_line": 42,
+          "end_line": 50,
+          "is_static": false,
+          "decisions": [
+            {
+              "file": "src\\math_ops.c",
+              "line": 43,
+              "expression": "a >= b && a >= c",
+              "conditions": [
+                "a >= b",
+                "a >= c"
+              ]
+            },
+            {
+              "file": "src\\math_ops.c",
+              "line": 45,
+              "expression": "b >= a && b >= c",
+              "conditions": [
+                "b >= a",
+                "b >= c"
+              ]
+            }
+          ],
+          "function_body": "{ if (a >= b && a >= c) { return a; } else if (b >= a && b >= c) { return b; } else { return c; } }",
+          "called_functions": [],
+          "used_structs": [],
+          "used_macros": [],
+          "required_headers": [
+            "<stdlib.h>"
+          ]
+        },
+        {
+          "file": "src\\math_ops.c",
+          "name": "classify_number",
+          "signature": "Operation classify_number(int n)",
+          "start_line": 53,
+          "end_line": 67,
+          "is_static": false,
+          "decisions": [
+            {
+              "file": "src\\math_ops.c",
+              "line": 54,
+              "expression": "n < 0",
+              "conditions": [
+                "n < 0"
+              ]
+            }
+          ],
+          "function_body": "{ if (n < 0) { return OP_UNKNOWN; } switch (n) { case 0: return OP_ADD; case 1: return OP_SUBTRACT; case 2: return OP_MULTIPLY; default: return OP_DIVIDE; } }",
+          "called_functions": [],
+          "used_structs": [],
+          "used_macros": [
+            "OP_ADD",
+            "OP_DIVIDE",
+            "OP_MULTIPLY",
+            "OP_SUBTRACT",
+            "OP_UNKNOWN"
+          ],
+          "required_headers": [
+            "<stdlib.h>"
+          ]
+        },
+        {
+          "file": "src\\math_ops.c",
+          "name": "power",
+          "signature": "int power(int base, int exp)",
+          "start_line": 70,
+          "end_line": 83,
+          "is_static": false,
+          "decisions": [
+            {
+              "file": "src\\math_ops.c",
+              "line": 71,
+              "expression": "exp < 0",
+              "conditions": [
+                "exp < 0"
+              ]
+            },
+            {
+              "file": "src\\math_ops.c",
+              "line": 74,
+              "expression": "exp == 0",
+              "conditions": [
+                "exp == 0"
+              ]
+            },
+            {
+              "file": "src\\math_ops.c",
+              "line": 78,
+              "expression": "exp > 0",
+              "conditions": [
+                "exp > 0"
+              ]
+            }
+          ],
+          "function_body": "{ if (exp < 0) { return ERROR_NEGATIVE; } if (exp == 0) { return 1; } int result = 1; while (exp > 0) { result *= base; exp--; } return result; }",
+          "called_functions": [],
+          "used_structs": [],
+          "used_macros": [
+            "ERROR_NEGATIVE"
+          ],
+          "required_headers": [
+            "<stdlib.h>"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "C:\\Users\\YUAN\\Documents\\Codex\\2026-06-07\\python-c-cunit-mc-dc\\outputs\\work\\tests\\auto_function_tests\\test__4_src_string_ops_str_length_str_compare.c",
+      "register_function": "register__4_src_string_ops_str_length_str_compare_tests",
+      "functions": [
+        {
+          "file": "src\\string_ops.c",
+          "name": "str_length",
+          "signature": "#include \"\" #include \"\" int str_length(const char *s)",
+          "start_line": 5,
+          "end_line": 14,
+          "is_static": false,
+          "decisions": [
+            {
+              "file": "src\\string_ops.c",
+              "line": 6,
+              "expression": "s == ((void*)0)",
+              "conditions": [
+                "s == ((void*)0)"
+              ]
+            },
+            {
+              "file": "src\\string_ops.c",
+              "line": 10,
+              "expression": "s[len] != ''\\0\\''",
+              "conditions": [
+                "s[len] != ''\\0\\''"
+              ]
+            }
+          ],
+          "function_body": "{ if (s == ((void*)0)) { return ERROR_NEGATIVE; } int len = 0; while (s[len] != ''\\0\\'') { len++; } return len; }",
+          "called_functions": [],
+          "used_structs": [],
+          "used_macros": [
+            "ERROR_NEGATIVE"
+          ],
+          "required_headers": []
+        },
+        {
+          "file": "src\\string_ops.c",
+          "name": "str_compare",
+          "signature": "int str_compare(const char *a, const char *b)",
+          "start_line": 17,
+          "end_line": 29,
+          "is_static": false,
+          "decisions": [
+            {
+              "file": "src\\string_ops.c",
+              "line": 18,
+              "expression": "a == ((void*)0) || b == ((void*)0)",
+              "conditions": [
+                "a == ((void*)0)",
+                "b == ((void*)0)"
+              ]
+            },
+            {
+              "file": "src\\string_ops.c",
+              "line": 21,
+              "expression": "*a != ''\\0\\'' && *b != ''\\0\\''",
+              "conditions": [
+                "*a != ''\\0\\''",
+                "*b != ''\\0\\''"
+              ]
+            },
+            {
+              "file": "src\\string_ops.c",
+              "line": 22,
+              "expression": "*a != *b",
+              "conditions": [
+                "*a != *b"
+              ]
+            }
+          ],
+          "function_body": "{ if (a == ((void*)0) || b == ((void*)0)) { return ERROR_NEGATIVE; } while (*a != ''\\0\\'' && *b != ''\\0\\'') { if (*a != *b) { return *a - *b; } a++; b++; } return *a - *b; }",
+          "called_functions": [],
+          "used_structs": [],
+          "used_macros": [
+            "ERROR_NEGATIVE"
+          ],
+          "required_headers": []
+        },
+        {
+          "file": "src\\string_ops.c",
+          "name": "find_char",
+          "signature": "const char *find_char(const char *s, char c)",
+          "start_line": 32,
+          "end_line": 43,
+          "is_static": false,
+          "decisions": [
+            {
+              "file": "src\\string_ops.c",
+              "line": 33,
+              "expression": "s == ((void*)0)",
+              "conditions": [
+                "s == ((void*)0)"
+              ]
+            },
+            {
+              "file": "src\\string_ops.c",
+              "line": 36,
+              "expression": "*s != ''\\0\\''",
+              "conditions": [
+                "*s != ''\\0\\''"
+              ]
+            },
+            {
+              "file": "src\\string_ops.c",
+              "line": 37,
+              "expression": "*s == c",
+              "conditions": [
+                "*s == c"
+              ]
+            }
+          ],
+          "function_body": "{ if (s == ((void*)0)) { return ((void*)0); } while (*s != ''\\0\\'') { if (*s == c) { return s; } s++; } return ((void*)0); }",
+          "called_functions": [],
+          "used_structs": [],
+          "used_macros": [],
+          "required_headers": []
+        }
+      ]
+    }
+  ],
+  "runner_output": "C:\\Users\\YUAN\\Documents\\Codex\\2026-06-07\\python-c-cunit-mc-dc\\outputs\\work\\tests\\auto_cunit_runner.c",
+  "notes": [
+    "To test static function print_result, compile src/main.c with -Dstatic= to strip static and expose the function globally. The test declares extern print_result.",
+    "clamp is declared in common.h, which is included. No additional stubs needed.",
+    "print_result test does not capture stdout; only verifies no crash.",
+    "Tests for add, subtract, multiply, divide. divide's b == 0 decision exercised true (by zero) and false (by non‑zero divisors) to satisfy MC/DC.",
+    "No stubs or fakes needed; all functions are public and have no external dependencies.",
+    "Include math_ops.h for Result type and SUCCESS/ERROR_ZERO macros.",
+    "MC/DC for condition b>=a in second decision of max_of_three is infeasible because any input that makes decision1 false and b>=c true forces b>=a true; no pair exists that changes b>=a independently while holding b>=c fixed and decision outcome changes.",
+    "All macros (ERROR_NEGATIVE, OP_ADD, etc.) and the Operation enum are assumed to be defined in math_ops.h; include path -Iinclude ensures visibility.",
+    "No external dependencies; all functions are public and self-contained.",
+    "Tests assume ERROR_NEGATIVE is defined as -1 in common.h.",
+    "The source file src/string_ops.c must be compiled together with this test file to provide function definitions.",
+    "The test runner should link against -lcunit (located at C:/msys64/ucrt64/lib) and include headers from C:/msys64/ucrt64/include."
+  ],
+  "assumptions": [
+    "src/main.c is compiled with -Dstatic= during test build to make static functions non‑static.",
+    "common.h contains the prototype for int clamp(int, int, int).",
+    "CUnit library and headers are available from C:/msys64/ucrt64.",
+    "math_ops.h defines Result with int quotient, remainder, error, and macros SUCCESS, ERROR_ZERO.",
+    "Source file src/math_ops.c is compiled together with the test file.",
+    "CUnit library and headers are available via -I C:/msys64/ucrt64/include and -L C:/msys64/ucrt64/lib -lcunit.",
+    "Header math_ops.h is present in include/ and correctly defines required macros and types.",
+    "CUnit library can be linked via -lcunit from C:/msys64/ucrt64/lib and headers from C:/msys64/ucrt64/include.",
+    "common.h defines ERROR_NEGATIVE as -1.",
+    "string_ops.h declares str_length, str_compare, and find_char."
+  ]
+}

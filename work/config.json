@@ -1,0 +1,36 @@
+﻿{
+    "project_root":  "./work",
+    "source_globs":  [
+                         "src/**/*.c",
+                         "include/**/*.h"
+                     ],
+    "include_dirs":  [
+                         "include",
+                         "src"
+                     ],
+    "test_output":  "tests/auto_mcdc_tests.c",
+    "build_commands":  [
+                           "cd work \u0026\u0026 gcc -Wall -Iinclude -Isrc -IC:/msys64/ucrt64/include -c src/math_ops.c -o build/math_ops.o",
+                           "cd work \u0026\u0026 gcc -Wall -Iinclude -Isrc -IC:/msys64/ucrt64/include -c src/string_ops.c -o build/string_ops.o",
+                           "cd work \u0026\u0026 gcc -Wall -Iinclude -Isrc -IC:/msys64/ucrt64/include -fprofile-arcs -ftest-coverage -c tests/auto_mcdc_tests.c -o build/auto_mcdc_tests.o",
+                           "cd work \u0026\u0026 gcc -fprofile-arcs -ftest-coverage build/math_ops.o build/string_ops.o build/auto_mcdc_tests.o -o build/test_runner.exe -LC:/msys64/ucrt64/lib -lcunit -lgcov"
+                       ],
+    "test_commands":  [
+                          "cd work \u0026\u0026 PATH=$env:PATH;C:/msys64/ucrt64/bin; build/test_runner.exe"
+                      ],
+    "coverage_commands":  [
+                              "cd work \u0026\u0026 gcov src/math_ops.c -o build",
+                              "cd work \u0026\u0026 gcov src/string_ops.c -o build"
+                          ],
+    "llm_base_url":  "https://api.deepseek.com/v1",
+    "llm_api_key_env":  "DEEPSEEK_API_KEY",
+    "llm_model":  "deepseek-v4-pro",
+    "max_llm_rounds":  1,
+    "llm_context_char_limit":  36000,
+    "source_excerpt_radius":  80,
+    "max_decisions_per_prompt":  60,
+    "function_test_dir":  "tests/auto_function_tests",
+    "runner_output":  "tests/auto_cunit_runner.c",
+    "max_functions_per_prompt":  4,
+    "extra_prompt":  "Prefer testing public APIs. All source files live under src/. Include headers from include/ and src/. Link against -lcunit from C:/msys64/ucrt64/lib. Include dir is C:/msys64/ucrt64/include."
+}

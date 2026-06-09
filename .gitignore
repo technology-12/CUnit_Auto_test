@@ -1,0 +1,29 @@
+﻿# Build artifacts
+work/build/
+*.o
+*.exe
+*.obj
+
+# Coverage artifacts
+*.gcno
+*.gcda
+*.gcov
+*.gcov.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated reports
+*.mcdc_report.*
