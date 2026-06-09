@@ -34,6 +34,37 @@ from typing import Any, Iterable
 
 DEFAULT_MODEL = "gpt-4.1"
 
+MCDC_REQUIREMENTS = textwrap.dedent("""
+MC/DC (Modified Condition / Decision Coverage) definition:
+- Every condition in a decision must be shown to independently affect the decision outcome.
+- For each condition C in a decision D, you must produce at least two test cases where:
+  1. Condition C evaluates to True in one and False in the other.
+  2. All other conditions in D have the SAME value in both test cases.
+  3. The overall decision D evaluates to different outcomes (True vs False) in the two cases.
+- This proves C independently controls D.
+
+Short-circuit evaluation rules (C language):
+- In `A && B`, if A is False, B is NOT evaluated. Therefore B cannot independently change
+  the decision outcome when A is False. You must set A=True to test B's independence.
+- In `A || B`, if A is True, B is NOT evaluated. Therefore B cannot independently change
+  the decision outcome when A is True. You must set A=False to test B's independence.
+- For mixed expressions like `A && (B || C)`, when testing B's independence:
+  A must be True, and C must be fixed (e.g., False) so that only B's change flips the result.
+
+Example for `if (a > 0 && b < 10)`:
+  Condition 0: a > 0   — pair: (a=5,b=5)→True vs (a=-1,b=5)→False
+  Condition 1: b < 10  — pair: (a=5,b=5)→True vs (a=5,b=15)→False
+  Note: b<10 can only flip the decision when a>0 is True (short-circuit).
+
+Example for `if (a || (b && c))`:
+  Condition 0: a       — pair: (a=1,b=0,c=0)→True vs (a=0,b=0,c=0)→False
+  Condition 1: b       — pair: (a=0,b=1,c=1)→True vs (a=0,b=0,c=1)→False
+  Condition 2: c       — pair: (a=0,b=1,c=1)→True vs (a=0,b=1,c=0)→False
+  Note: b and c can only flip the decision when a is False (short-circuit).
+
+For each decision below, you MUST generate test cases that satisfy ALL of its MC/DC pairs.
+""").strip()
+
 
 @dataclasses.dataclass
 class Decision:
@@ -742,6 +773,9 @@ def build_mcdc_feedback_prompt(config: Config, uncovered_pairs: list[MCDCPair], 
 
     source_blob = build_source_context(config, decisions)
     include_flags = " ".join(f"-I{item}" for item in config.include_dirs)
+
+    mcdc_requirements = MCDC_REQUIREMENTS
+
     return textwrap.dedent(
         f"""
         You are generating additional CUnit tests to achieve MC/DC coverage for a C project.
@@ -761,6 +795,19 @@ def build_mcdc_feedback_prompt(config: Config, uncovered_pairs: list[MCDCPair], 
         - Create focused tests that exercise the specific uncovered MC/DC pairs listed below.
         - Keep tests deterministic.
         - Do not include Markdown fences.
+        - For each uncovered pair, generate a SEPARATE test function that demonstrates
+          the MC/DC independence for that specific condition.
+        - Name each test to indicate which condition and pair it covers, e.g.:
+          test_<file>_<line>_cond<idx>_independence.
+        - In each test, use CU_ASSERT to verify the decision outcome.
+        - Add a comment above each test explaining:
+          1. Which condition is being tested for independence.
+          2. What values the OTHER conditions are fixed to and why.
+          3. How the two test cases in the pair differ only in the target condition.
+        - Pay special attention to short-circuit evaluation: make sure the condition
+          being tested is actually reachable (not short-circuited) in both test cases.
+
+        {mcdc_requirements}
 
         Project root: {config.project_root}
         Include flags: {include_flags}
@@ -1011,6 +1058,9 @@ def build_prompt(config: Config, decisions: list[Decision]) -> str:
         for d in selected_decisions
     ]
     include_flags = " ".join(f"-I{item}" for item in config.include_dirs)
+
+    mcdc_requirements = MCDC_REQUIREMENTS
+
     return textwrap.dedent(
         f"""
         You are generating CUnit tests for a C project. Target MC/DC coverage for
@@ -1028,6 +1078,15 @@ def build_prompt(config: Config, decisions: list[Decision]) -> str:
         - Keep tests deterministic.
         - Do not include Markdown fences.
         - Mention any required stubs in notes if external dependencies block testing.
+        - For each decision, generate a SEPARATE test function that clearly demonstrates
+          the MC/DC independence pair for each condition.
+        - Name each test to indicate which condition it covers, e.g.:
+          test_decision_line{selected_decisions[0].line if selected_decisions else 'N'}_cond0_true,
+          test_decision_line{selected_decisions[0].line if selected_decisions else 'N'}_cond0_false.
+        - In each test, use CU_ASSERT to verify the decision outcome (True or False).
+        - Add a comment above each test explaining which MC/DC pair it satisfies.
+
+        {mcdc_requirements}
 
         Project root: {config.project_root}
         Include flags: {include_flags}
@@ -1111,6 +1170,9 @@ def build_function_prompt(config: Config, functions: list[CFunction], batch_id: 
         )
     register_name = f"register_{batch_id}_tests"
     include_flags = " ".join(f"-I{item}" for item in config.include_dirs)
+
+    mcdc_requirements = MCDC_REQUIREMENTS
+
     return textwrap.dedent(
         f"""
         You are generating CUnit tests for a C project, one batch at a time.
@@ -1136,6 +1198,15 @@ def build_function_prompt(config: Config, functions: list[CFunction], batch_id: 
           the test target or including it behind a test-only macro if the project allows that.
         - Mention required stubs or fakes in notes if external dependencies block direct testing.
         - Do not include Markdown fences.
+        - For each decision, generate a SEPARATE test function that clearly demonstrates
+          the MC/DC independence pair for each condition.
+        - Name each test to indicate which condition it covers, e.g.:
+          test_<func>_<line>_cond0_true, test_<func>_<line>_cond0_false.
+        - In each test, use CU_ASSERT to verify the decision outcome (True or False).
+        - Add a comment above each test explaining which MC/DC pair it satisfies and why
+          the other conditions are held fixed.
+
+        {mcdc_requirements}
 
         Project root: {config.project_root}
         Include flags: {include_flags}
