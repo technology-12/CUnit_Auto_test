@@ -1,0 +1,23 @@
+{
+    "project_root": "/workspace/test_c_project",
+    "source_globs": ["src/**/*.c", "include/**/*.h"],
+    "include_dirs": ["include"],
+    "test_output": "tests/auto_mcdc_tests.c",
+    "build_commands": [],
+    "test_commands": [],
+    "coverage_commands": [],
+    "llm_base_url": "https://api.openai.com/v1",
+    "llm_api_key_env": "OPENAI_API_KEY",
+    "llm_model": "gpt-4.1",
+    "max_llm_rounds": 2,
+    "llm_context_char_limit": 36000,
+    "source_excerpt_radius": 80,
+    "max_decisions_per_prompt": 60,
+    "function_test_dir": "tests/auto_function_tests",
+    "runner_output": "tests/auto_cunit_runner.c",
+    "max_functions_per_prompt": 8,
+    "extra_prompt": "Prefer testing public APIs; create local stubs only when necessary.",
+    "instrument_dir": "mcdc_instrumented",
+    "mcdc_trace_file": "mcdc_trace.txt",
+    "compile_test_command": ""
+}
