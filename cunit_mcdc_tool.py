@@ -1112,6 +1112,180 @@ def build_prompt(config: Config, decisions: list[Decision]) -> str:
 
 
 def build_source_context(config: Config, decisions: list[Decision]) -> str:
+    return _build_source_context_impl(config, decisions)
+
+
+def auto_batch_decisions(
+    config: Config, decisions: list[Decision]
+) -> list[list[Decision]]:
+    """Split decisions into batches that fit within max_prompt_tokens.
+
+    Uses a greedy approach: start with an empty batch, add decisions one by
+    one, and check the estimated token count of the resulting prompt.  When
+    adding the next decision would exceed the limit, start a new batch.
+
+    A minimum of 1 decision per batch is always enforced.
+    """
+    if not decisions:
+        return []
+
+    max_tokens = config.max_prompt_tokens
+    batches: list[list[Decision]] = []
+    current_batch: list[Decision] = []
+
+    for decision in decisions:
+        trial = current_batch + [decision]
+        prompt = build_prompt(config, trial)
+        if estimate_tokens(prompt) > max_tokens and current_batch:
+            # Current batch is full; start a new one
+            batches.append(current_batch)
+            current_batch = [decision]
+        else:
+            current_batch = trial
+
+    if current_batch:
+        batches.append(current_batch)
+
+    return batches
+
+
+def auto_batch_functions(
+    config: Config, functions: list[CFunction]
+) -> list[list[CFunction]]:
+    """Split functions into batches that fit within max_prompt_tokens.
+
+    Similar to auto_batch_decisions: build the prompt for each candidate
+    batch and split when the token budget would be exceeded.
+    """
+    if not functions:
+        return []
+
+    max_tokens = config.max_prompt_tokens
+    # First, apply the existing per-file grouping and max_functions_per_prompt
+    pre_batches: list[list[CFunction]] = []
+    for batch in batch_functions(config, functions):
+        pre_batches.append(batch)
+
+    # Now further split any pre-batch that exceeds the token limit
+    result: list[list[CFunction]] = []
+    for pre_batch in pre_batches:
+        current_batch: list[CFunction] = []
+        for func in pre_batch:
+            trial = current_batch + [func]
+            batch_id = make_batch_id(trial, len(result) + 1)
+            prompt = build_function_prompt(config, trial, batch_id)
+            if estimate_tokens(prompt) > max_tokens and current_batch:
+                result.append(current_batch)
+                current_batch = [func]
+            else:
+                current_batch = trial
+        if current_batch:
+            result.append(current_batch)
+
+    return result
+
+
+def merge_test_files(test_sources: list[str], output_path: Path) -> Path:
+    """Merge multiple CUnit test source files into one unified file.
+
+    Each input source may contain its own #include directives, test
+    functions, and registration functions.  The merged output:
+    - Deduplicates #include directives
+    - Preserves all test functions
+    - Creates a single unified registration function that calls all
+      individual registration functions
+    - Adds a main() if none of the inputs define one
+    """
+    if not test_sources:
+        raise RuntimeError("no test sources to merge")
+
+    if len(test_sources) == 1:
+        ensure_parent(output_path)
+        output_path.write_text(test_sources[0].rstrip() + "\n", encoding="utf-8")
+        return output_path
+
+    all_includes: list[str] = []
+    all_bodies: list[str] = []
+    all_register_decls: list[str] = []
+    all_register_calls: list[str] = []
+    has_main = False
+
+    for idx, source in enumerate(test_sources):
+        lines = source.split("\n")
+        include_lines: list[str] = []
+        body_lines: list[str] = []
+        local_register_funcs: list[str] = []
+
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("#include"):
+                include_lines.append(line)
+            elif re.match(r"int\s+main\s*\(", stripped):
+                has_main = True
+                body_lines.append(line)
+            elif re.match(r"void\s+(register_\w+)\s*\(\s*void\s*\)", stripped):
+                match = re.match(r"void\s+(register_\w+)\s*\(\s*void\s*\)", stripped)
+                if match:
+                    local_register_funcs.append(match.group(1))
+                body_lines.append(line)
+            else:
+                body_lines.append(line)
+
+        all_includes.extend(include_lines)
+        all_bodies.append(f"/* --- Batch {idx + 1} --- */\n" + "\n".join(body_lines))
+
+        for func_name in local_register_funcs:
+            all_register_decls.append(f"extern void {func_name}(void);")
+            all_register_calls.append(f"    {func_name}();")
+
+    # Deduplicate includes
+    seen_includes: set[str] = set()
+    unique_includes: list[str] = []
+    for inc in all_includes:
+        if inc not in seen_includes:
+            seen_includes.add(inc)
+            unique_includes.append(inc)
+
+    # Build merged file
+    parts: list[str] = []
+    parts.append("/* === Merged CUnit test file (auto-generated) === */\n")
+    parts.append("\n".join(unique_includes))
+    parts.append("\n")
+
+    for decl in all_register_decls:
+        parts.append(decl + "\n")
+
+    for body in all_bodies:
+        parts.append(body)
+        parts.append("\n")
+
+    # Add unified main if no main exists
+    if not has_main and all_register_calls:
+        parts.append(textwrap.dedent(f"""
+            void register_all_mcdc_tests(void) {{
+            {chr(10).join(all_register_calls)}
+            }}
+
+            int main(void) {{
+                if (CU_initialize_registry() != CUE_SUCCESS) {{
+                    return CU_get_error();
+                }}
+                register_all_mcdc_tests();
+                CU_basic_set_mode(CU_BRM_VERBOSE);
+                CU_basic_run_tests();
+                unsigned int failures = CU_get_number_of_failures();
+                CU_cleanup_registry();
+                return failures == 0 ? 0 : 1;
+            }}
+            """))
+
+    merged = "\n".join(parts)
+    ensure_parent(output_path)
+    output_path.write_text(merged, encoding="utf-8")
+    return output_path
+
+
+def _build_source_context_impl(config: Config, decisions: list[Decision]) -> str:
     by_file: dict[str, list[int]] = {}
     for decision in decisions:
         by_file.setdefault(decision.file, []).append(decision.line)
@@ -1368,17 +1542,30 @@ def strip_markdown_json_fence(content: str) -> str:
 
 
 def generate_function_tests(config: Config, functions: list[CFunction]) -> dict[str, Any]:
+    """Generate CUnit tests for all functions, auto-batching by token limit."""
+    batches = auto_batch_functions(config, functions)
+    return _generate_function_tests_from_batches(config, batches, functions)
+
+
+def _generate_function_tests_from_batches(
+    config: Config,
+    batches: list[list[CFunction]],
+    all_functions: list[CFunction],
+) -> dict[str, Any]:
+    """Core implementation: generate CUnit tests for pre-computed batches."""
     ensure_parent(config.function_test_dir / "placeholder")
     generated_files = []
     notes = []
     assumptions = []
-    for batch_index, batch in enumerate(batch_functions(config, functions), start=1):
+    for batch_index, batch in enumerate(batches, start=1):
         batch_id = make_batch_id(batch, batch_index)
         prompt = build_function_prompt(config, batch, batch_id)
-        payload = call_llm(config, prompt)
+        payload = call_llm(config, prompt, label=f"func-batch-{batch_index}")
         test_file = payload.get("test_file")
         if not isinstance(test_file, str) or "#include" not in test_file:
-            raise RuntimeError(f"LLM response for batch {batch_id} did not contain a valid test_file")
+            print(f"warning: batch {batch_id} LLM response invalid, skipping",
+                  file=sys.stderr)
+            continue
         register_function = payload.get("register_function") or f"register_{batch_id}_tests"
         output = config.function_test_dir / f"test_{batch_id}.c"
         output.write_text(test_file.rstrip() + "\n", encoding="utf-8")
@@ -1397,7 +1584,8 @@ def generate_function_tests(config: Config, functions: list[CFunction]) -> dict[
                     f'{{"test_file": "corrected C source code", "register_function": "{register_function}"}}'
                 )
                 try:
-                    retry_payload = call_llm(config, retry_prompt)
+                    retry_payload = call_llm(config, retry_prompt,
+                                             label=f"func-batch-{batch_index}-retry-{retry}")
                     retry_test_file = retry_payload.get("test_file")
                     if isinstance(retry_test_file, str) and "#include" in retry_test_file:
                         output.write_text(retry_test_file.rstrip() + "\n", encoding="utf-8")
@@ -1417,7 +1605,7 @@ def generate_function_tests(config: Config, functions: list[CFunction]) -> dict[
     runner = write_cunit_runner(config, generated_files)
     manifest = {
         "project_root": str(config.project_root),
-        "function_count": len(functions),
+        "function_count": len(all_functions),
         "generated_files": generated_files,
         "runner_output": str(runner),
         "notes": notes,
@@ -1859,17 +2047,50 @@ def cmd_generate(args: argparse.Namespace) -> int:
     decisions = discover_decisions(config)
     if not decisions:
         raise RuntimeError("no decisions found in configured source files")
-    prompt = build_prompt(config, decisions)
+
+    # Auto-batch decisions to fit within token limits
+    batches = auto_batch_decisions(config, decisions)
+
     if args.dry_run_prompt:
-        print(prompt)
+        for idx, batch in enumerate(batches, start=1):
+            prompt = build_prompt(config, batch)
+            print(f"\n===== DECISION TEST PROMPT: batch {idx}/{len(batches)} "
+                  f"({len(batch)} decisions, ~{estimate_tokens(prompt)} tokens) =====\n")
+            print(prompt)
         return 0
-    llm_payload = call_llm(config, prompt)
-    test_file = llm_payload.get("test_file")
-    if not isinstance(test_file, str) or "#include" not in test_file:
-        raise RuntimeError("LLM response did not contain a valid test_file")
-    ensure_parent(config.test_output)
-    config.test_output.write_text(test_file.rstrip() + "\n", encoding="utf-8")
-    print(f"wrote generated CUnit tests: {config.test_output}")
+
+    if len(batches) == 1:
+        # Single batch: direct output
+        prompt = build_prompt(config, batches[0])
+        llm_payload = call_llm(config, prompt, label="decision-batch-1")
+        test_file = llm_payload.get("test_file")
+        if not isinstance(test_file, str) or "#include" not in test_file:
+            raise RuntimeError("LLM response did not contain a valid test_file")
+        ensure_parent(config.test_output)
+        config.test_output.write_text(test_file.rstrip() + "\n", encoding="utf-8")
+        print(f"wrote generated CUnit tests: {config.test_output}")
+    else:
+        # Multiple batches: call LLM per batch, then merge
+        print(f"prompt exceeds token limit, splitting into {len(batches)} batches")
+        test_sources: list[str] = []
+        for idx, batch in enumerate(batches, start=1):
+            prompt = build_prompt(config, batch)
+            print(f"  batch {idx}/{len(batches)}: {len(batch)} decisions, "
+                  f"~{estimate_tokens(prompt)} tokens")
+            llm_payload = call_llm(config, prompt, label=f"decision-batch-{idx}")
+            test_file = llm_payload.get("test_file")
+            if not isinstance(test_file, str) or "#include" not in test_file:
+                print(f"  warning: batch {idx} LLM response invalid, skipping",
+                      file=sys.stderr)
+                continue
+            test_sources.append(test_file)
+
+        if not test_sources:
+            raise RuntimeError("all LLM batches failed to produce valid test files")
+
+        merge_test_files(test_sources, config.test_output)
+        print(f"wrote merged CUnit tests from {len(test_sources)} batches: {config.test_output}")
+
     return 0
 
 
@@ -1878,13 +2099,22 @@ def cmd_generate_functions(args: argparse.Namespace) -> int:
     functions = discover_functions(config)
     if not functions:
         raise RuntimeError("no C functions found in configured .c source files")
+
+    # Auto-batch functions to fit within token limits
+    batches = auto_batch_functions(config, functions)
+
     if args.dry_run_prompt:
-        for batch_index, batch in enumerate(batch_functions(config, functions), start=1):
-            batch_id = make_batch_id(batch, batch_index)
-            print(f"\n===== FUNCTION TEST PROMPT: {batch_id} =====\n")
-            print(build_function_prompt(config, batch, batch_id))
+        for idx, batch in enumerate(batches, start=1):
+            batch_id = make_batch_id(batch, idx)
+            prompt = build_function_prompt(config, batch, batch_id)
+            print(f"\n===== FUNCTION TEST PROMPT: {batch_id} "
+                  f"(batch {idx}/{len(batches)}, ~{estimate_tokens(prompt)} tokens) =====\n")
+            print(prompt)
         return 0
-    manifest = generate_function_tests(config, functions)
+
+    # Use generate_function_tests which already handles batching internally,
+    # but pass the auto-batched result
+    manifest = _generate_function_tests_from_batches(config, batches, functions)
     print(f"wrote {len(manifest['generated_files'])} function test file(s)")
     print(f"wrote CUnit runner: {manifest['runner_output']}")
     print(f"wrote manifest: {config.function_test_dir / 'auto_function_tests_manifest.json'}")
@@ -1900,10 +2130,35 @@ def cmd_run(args: argparse.Namespace) -> int:
     mcdc_pairs: list[MCDCPair] | None = None
 
     if args.generate:
-        prompt = build_prompt(config, decisions)
-        llm_payload = call_llm(config, prompt)
-        ensure_parent(config.test_output)
-        config.test_output.write_text(llm_payload["test_file"].rstrip() + "\n", encoding="utf-8")
+        batches = auto_batch_decisions(config, decisions)
+        if len(batches) == 1:
+            prompt = build_prompt(config, batches[0])
+            llm_payload = call_llm(config, prompt, label="decision-batch-1")
+            ensure_parent(config.test_output)
+            config.test_output.write_text(llm_payload["test_file"].rstrip() + "\n", encoding="utf-8")
+        else:
+            print(f"prompt exceeds token limit, splitting into {len(batches)} batches")
+            test_sources: list[str] = []
+            for idx, batch in enumerate(batches, start=1):
+                prompt = build_prompt(config, batch)
+                print(f"  batch {idx}/{len(batches)}: {len(batch)} decisions, "
+                      f"~{estimate_tokens(prompt)} tokens")
+                try:
+                    batch_payload = call_llm(config, prompt, label=f"decision-batch-{idx}")
+                    test_file = batch_payload.get("test_file")
+                    if isinstance(test_file, str) and "#include" in test_file:
+                        test_sources.append(test_file)
+                    else:
+                        print(f"  warning: batch {idx} LLM response invalid, skipping",
+                              file=sys.stderr)
+                except Exception as exc:
+                    print(f"  warning: batch {idx} LLM call failed: {exc}", file=sys.stderr)
+            if test_sources:
+                merge_test_files(test_sources, config.test_output)
+                llm_payload = {"test_file": config.test_output.read_text(encoding="utf-8"),
+                               "notes": [], "assumptions": []}
+            else:
+                llm_payload = None
     if args.generate_functions:
         functions = discover_functions(config)
         function_manifest = generate_function_tests(config, functions)
