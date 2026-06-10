@@ -120,6 +120,36 @@ Example for `int compute_checksum(const uint8_t *buf, int len)`:
       uint8_t buf[] = {200, 200};
       CU_ASSERT_EQUAL(compute_checksum(buf, 2), 144);
   }
+
+Testing functions that use global variables:
+In embedded and systems C code, functions often read input data from global variables
+(file-scope or extern) instead of receiving them through parameters. When testing such
+functions, you MUST:
+- Identify all global variables the function reads or writes by inspecting the source code.
+- Before calling the function under test, explicitly set each relevant global variable to
+  the desired test value in the test function body.
+- After calling the function, assert the expected result (return value, output parameter,
+  or modified global variable).
+- Reset global variables to a known state before each test to avoid inter-test interference.
+  Use a setup function registered with CU_add_suite, or reset them manually at the start
+  of each test.
+- In the trace comment, note which global variables are being set and why:
+    // Global input: g_sensor_temp = 85.0f, g_sensor_hum = 25.0f
+    // Trace: temp > WARN_TEMP (85>80) → true; hum < 30 (25<30) → true; ...
+    // Expected: SENSOR_WARN
+
+Example for a function using globals:
+  // Source: SensorStatus check_alerts(void) — reads g_sensor_temp, g_sensor_hum
+  void test_check_alerts_normal(void) {
+      g_sensor_temp = 50.0f;   // normal temperature
+      g_sensor_hum = 60.0f;    // normal humidity
+      CU_ASSERT_EQUAL(check_alerts(), SENSOR_OK);
+  }
+  void test_check_alerts_high_temp_low_hum(void) {
+      g_sensor_temp = 85.0f;   // above WARN_TEMP
+      g_sensor_hum = 25.0f;    // below 30
+      CU_ASSERT_EQUAL(check_alerts(), SENSOR_WARN);
+  }
 """).strip()
 
 
@@ -1686,6 +1716,10 @@ def build_function_prompt(config: Config, functions: list[CFunction], batch_id: 
           and use the most practical approach for a CUnit test project, such as compiling the source file into
           the test target or including it behind a test-only macro if the project allows that.
         - Mention required stubs or fakes in notes if external dependencies block direct testing.
+        - If a function reads or writes global (file-scope / extern) variables instead of
+          receiving inputs through parameters, you MUST set those globals to the desired
+          test values before calling the function, and reset them between tests to avoid
+          inter-test interference. Declare them as `extern` in the test file if needed.
         - Do not include Markdown fences.
 
         Project root: {config.project_root}
