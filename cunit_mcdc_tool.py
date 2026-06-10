@@ -65,6 +65,63 @@ Example for `if (a || (b && c))`:
 For each decision below, you MUST generate test cases that satisfy ALL of its MC/DC pairs.
 """).strip()
 
+DATA_VALUE_TEST_GUIDE = textwrap.dedent("""
+Data-value testing guide (for computation functions without decisions):
+For functions that perform calculations, data transformations, or state changes
+(rather than pure boolean decisions), you must generate tests covering:
+
+1. Normal values: typical inputs in the expected operating range.
+2. Boundary values: minimum and maximum valid inputs (e.g., 0, INT_MAX, INT_MIN,
+   FLT_MAX, array length 0 vs full length, empty string, etc.).
+3. Edge cases: off-by-one values, values just outside valid ranges, zero, negative
+   numbers where only positive is expected, etc.
+4. Error-path inputs: NULL pointers, invalid enum values, out-of-range indices,
+   buffer overflow attempts, etc.
+
+Deriving expected values for computation tests:
+- You MUST trace through the source code step by step to compute the expected output
+  for each test input. Do NOT guess or assume.
+- For each test, add a comment showing the manual trace:
+    // Input: x=5, y=3
+    // Trace: sum = 5 + 3 = 8; result = 8 & 0xFF = 8
+    // Expected: 8
+- For boundary values, note why the boundary was chosen:
+    // Boundary: len=0 (empty buffer, loop body never executes)
+    // Expected: sum=0, result=0
+- For functions returning structs or modifying output parameters, verify each field.
+- Use CU_ASSERT_EQUAL for integer comparisons, CU_ASSERT_DOUBLE_EQUAL for floats,
+  and CU_ASSERT_STRING_EQUAL for strings when available. Fall back to CU_ASSERT
+  with a manual comparison expression otherwise.
+
+Example for `int compute_checksum(const uint8_t *buf, int len)`:
+  // Test: normal values
+  // Input: buf={10, 20, 30}, len=3
+  // Trace: i=0: sum=10; i=1: sum=30; i=2: sum=60; result=60&0xFF=60
+  // Expected: 60
+  void test_checksum_normal(void) {
+      uint8_t buf[] = {10, 20, 30};
+      CU_ASSERT_EQUAL(compute_checksum(buf, 3), 60);
+  }
+
+  // Test: boundary - empty buffer
+  // Input: buf={}, len=0
+  // Trace: loop condition i<0 is false immediately; sum=0; result=0
+  // Expected: 0
+  void test_checksum_empty(void) {
+      uint8_t buf[] = {0};
+      CU_ASSERT_EQUAL(compute_checksum(buf, 0), 0);
+  }
+
+  // Test: boundary - overflow (sum exceeds 255)
+  // Input: buf={200, 200}, len=2
+  // Trace: i=0: sum=200; i=1: sum=400; result=400&0xFF=144
+  // Expected: 144
+  void test_checksum_overflow(void) {
+      uint8_t buf[] = {200, 200};
+      CU_ASSERT_EQUAL(compute_checksum(buf, 2), 144);
+  }
+""").strip()
+
 
 @dataclasses.dataclass
 class Decision:
@@ -1555,6 +1612,11 @@ def build_function_prompt(config: Config, functions: list[CFunction], batch_id: 
     include_flags = " ".join(f"-I{item}" for item in config.include_dirs)
 
     mcdc_requirements = MCDC_REQUIREMENTS
+    data_value_guide = DATA_VALUE_TEST_GUIDE
+
+    # Classify functions: with decisions vs pure computation
+    functions_with_decisions = [f for f in functions if f.decisions]
+    functions_without_decisions = [f for f in functions if not f.decisions]
 
     # Generate truth tables for all decisions in this batch
     all_decisions: list[Decision] = []
@@ -1563,6 +1625,16 @@ def build_function_prompt(config: Config, functions: list[CFunction], batch_id: 
     truth_table_blob = "\n\n".join(
         format_truth_table_for_prompt(d) for d in all_decisions
     ) if all_decisions else ""
+
+    # Build function classification info for the prompt
+    func_classification = []
+    if functions_with_decisions:
+        names = ", ".join(f.name for f in functions_with_decisions)
+        func_classification.append(f"Functions with decisions (need MC/DC tests): {names}")
+    if functions_without_decisions:
+        names = ", ".join(f.name for f in functions_without_decisions)
+        func_classification.append(f"Pure computation functions (need data-value tests): {names}")
+    classification_text = "\n".join(func_classification)
 
     return textwrap.dedent(
         f"""
@@ -1575,31 +1647,46 @@ def build_function_prompt(config: Config, functions: list[CFunction], batch_id: 
           "assumptions": ["brief assumption"]
         }}
 
-        Requirements:
+        There are TWO types of test in this batch. Handle each differently:
+
+        ═══ TYPE 1: Functions WITH decisions (MC/DC tests) ═══
+        For these functions, generate MC/DC independence pair tests.
+        - For each decision, generate a SEPARATE test function per condition.
+        - Name each test: test_<func>_<line>_cond<idx>_true or test_<func>_<line>_cond<idx>_false.
+        - Use CU_ASSERT to verify the decision outcome (True or False).
+          The EXPECTED outcome is given in the truth tables below — USE THEM, do NOT guess.
+        - Add a comment above each test explaining which MC/DC pair it satisfies,
+          why other conditions are held fixed, and what the expected outcome is.
+
+        ═══ TYPE 2: Functions WITHOUT decisions (data-value tests) ═══
+        For these functions, generate data-value tests covering normal values,
+        boundary values, edge cases, and error paths.
+        - Name each test: test_<func>_<scenario> (e.g., test_checksum_normal,
+          test_checksum_empty, test_checksum_overflow).
+        - You MUST trace through the source code step by step to compute the expected
+          output for each test input. Do NOT guess or assume.
+        - Add a comment above each test showing the manual trace and expected value.
+        - Use CU_ASSERT_EQUAL / CU_ASSERT_DOUBLE_EQUAL / CU_ASSERT_STRING_EQUAL
+          when available, otherwise CU_ASSERT with a comparison expression.
+
+        {mcdc_requirements}
+
+        {data_value_guide}
+
+        Function classification:
+        {classification_text}
+
+        Requirements (all tests):
         - Use CUnit/Basic.h.
         - Do not define main().
         - Define this registration function exactly: void {register_name}(void)
         - Inside {register_name}, call CU_add_suite and CU_add_test for this batch.
-        - Generate tests for every listed function.
-        - For functions with decisions, target MC/DC pairs for each listed decision.
-        - For functions without decisions, generate input/output, boundary, and error-path tests where possible.
         - Keep tests deterministic.
         - Prefer testing public APIs and headers. If a function is static, state the needed build strategy in notes
           and use the most practical approach for a CUnit test project, such as compiling the source file into
           the test target or including it behind a test-only macro if the project allows that.
         - Mention required stubs or fakes in notes if external dependencies block direct testing.
         - Do not include Markdown fences.
-        - For each decision, generate a SEPARATE test function that clearly demonstrates
-          the MC/DC independence pair for each condition.
-        - Name each test to indicate which condition it covers, e.g.:
-          test_<func>_<line>_cond0_true, test_<func>_<line>_cond0_false.
-        - In each test, use CU_ASSERT to verify the decision outcome (True or False).
-          The EXPECTED decision outcome for each MC/DC pair is given in the truth tables below.
-          You MUST use the expected outcome from the truth table, NOT guess from the source code.
-        - Add a comment above each test explaining which MC/DC pair it satisfies, why
-          the other conditions are held fixed, and what the expected outcome is.
-
-        {mcdc_requirements}
 
         Project root: {config.project_root}
         Include flags: {include_flags}
@@ -1609,7 +1696,7 @@ def build_function_prompt(config: Config, functions: list[CFunction], batch_id: 
         Target functions:
         {json.dumps(function_payload, ensure_ascii=False, indent=2)}
 
-        Truth tables and expected test outcomes (USE THESE for CU_ASSERT expected values):
+        Truth tables and expected test outcomes for MC/DC tests (TYPE 1 functions):
         {truth_table_blob}
 
         Source excerpts:
