@@ -59,6 +59,8 @@ class App(tk.Tk):
             "function_test_dir": tk.StringVar(value="tests/auto_function_tests"),
             "runner_output": tk.StringVar(value="tests/auto_cunit_runner.c"),
             "max_functions_per_prompt": tk.StringVar(value="8"),
+            "max_prompt_tokens": tk.StringVar(value="12000"),
+            "max_response_tokens": tk.StringVar(value="4096"),
         }
 
         self._build_style()
@@ -153,10 +155,12 @@ class App(tk.Tk):
         self._row_entry(tab, 12, "Function Test Dir", "function_test_dir")
         self._row_entry(tab, 13, "Runner Output", "runner_output")
         self._row_entry(tab, 14, "Max Functions/Batch", "max_functions_per_prompt")
+        self._row_entry(tab, 15, "Max Prompt Tokens", "max_prompt_tokens")
+        self._row_entry(tab, 16, "Max Response Tokens", "max_response_tokens")
         hint = (
             "Source globs / Include dirs: comma-separated.\n"
             "API Key Value writes to process env, not saved to config.\n"
-            "If model reports token shortage, reduce context char limit.\n"
+            "If model reports token shortage, reduce max_prompt_tokens or context char limit.\n"
         )
         ttk.Label(tab, text=hint, wraplength=420, foreground="#555555").grid(
             row=15, column=0, columnspan=3, sticky=tk.W, pady=(12, 0)
@@ -363,6 +367,10 @@ class App(tk.Tk):
             raw.get("runner_output", "tests/auto_cunit_runner.c"))
         self.vars["max_functions_per_prompt"].set(
             str(raw.get("max_functions_per_prompt", 8)))
+        self.vars["max_prompt_tokens"].set(
+            str(raw.get("max_prompt_tokens", 12000)))
+        self.vars["max_response_tokens"].set(
+            str(raw.get("max_response_tokens", 4096)))
         self._set_text(self.build_text,
                        list_to_lines(raw.get("build_commands", [])))
         self._set_text(self.test_text,
@@ -422,6 +430,10 @@ class App(tk.Tk):
             "runner_output": self.vars["runner_output"].get(),
             "max_functions_per_prompt": int(
                 self.vars["max_functions_per_prompt"].get() or 8),
+            "max_prompt_tokens": int(
+                self.vars["max_prompt_tokens"].get() or 12000),
+            "max_response_tokens": int(
+                self.vars["max_response_tokens"].get() or 4096),
             "extra_prompt": self.extra_prompt_text.get(
                 "1.0", tk.END).strip(),
         }
@@ -755,6 +767,10 @@ if not hasattr(core, "load_config_from_raw"):
                     "tests/auto_cunit_runner.c")).resolve(),
             max_functions_per_prompt=int(
                 raw.get("max_functions_per_prompt", 8)),
+            max_prompt_tokens=int(
+                raw.get("max_prompt_tokens", 12000)),
+            max_response_tokens=int(
+                raw.get("max_response_tokens", 4096)),
             extra_prompt=raw.get("extra_prompt", ""),
         )
 

@@ -110,6 +110,8 @@ class Config:
     runner_output: Path
     max_functions_per_prompt: int
     extra_prompt: str
+    max_prompt_tokens: int
+    max_response_tokens: int
     instrument_dir: Path = dataclasses.field(default_factory=lambda: Path("mcdc_instrumented"))
     mcdc_trace_file: Path = dataclasses.field(default_factory=lambda: Path("mcdc_trace.txt"))
     compile_test_command: str = ""
@@ -139,6 +141,8 @@ def load_config(path: Path) -> Config:
         runner_output=(project_root / raw.get("runner_output", "tests/auto_cunit_runner.c")).resolve(),
         max_functions_per_prompt=int(raw.get("max_functions_per_prompt", 8)),
         extra_prompt=raw.get("extra_prompt", ""),
+        max_prompt_tokens=int(raw.get("max_prompt_tokens", 12000)),
+        max_response_tokens=int(raw.get("max_response_tokens", 4096)),
         instrument_dir=(project_root / instrument_dir_raw).resolve(),
         mcdc_trace_file=(project_root / mcdc_trace_raw).resolve(),
         compile_test_command=raw.get("compile_test_command", ""),
@@ -1277,10 +1281,48 @@ def merge_line_windows(line_numbers: list[int], total_lines: int, radius: int) -
     return merged
 
 
-def call_llm(config: Config, prompt: str) -> dict[str, Any]:
+def estimate_tokens(text: str) -> int:
+    """Estimate token count for a text string.
+
+    Uses a conservative heuristic: ~3.5 chars per token for mixed
+    English/code content (GPT-style tokenizers average ~4 chars/token
+    for English but less for code with many symbols).
+    """
+    return max(1, len(text) // 3)
+
+
+def truncate_prompt_to_token_limit(prompt: str, max_tokens: int, label: str = "") -> str:
+    """Truncate a prompt to fit within a token budget.
+
+    If the prompt exceeds max_tokens, it is truncated and a notice is appended.
+    The truncation preserves the beginning of the prompt (which contains
+    instructions and decision data) and cuts from the end (source excerpts).
+    """
+    estimated = estimate_tokens(prompt)
+    if estimated <= max_tokens:
+        return prompt
+    # Convert token limit back to char limit (conservative)
+    char_limit = max_tokens * 3
+    notice = f"\n\n// PROMPT TRUNCATED: original ~{estimated} tokens exceeded limit of {max_tokens}"
+    if label:
+        notice += f" (context: {label})"
+    notice += ". Source excerpts may be incomplete."
+    truncated = prompt[:char_limit - len(notice)]
+    return truncated + notice
+
+
+def call_llm(config: Config, prompt: str, label: str = "") -> dict[str, Any]:
     api_key = os.environ.get(config.llm_api_key_env)
     if not api_key:
         raise RuntimeError(f"environment variable {config.llm_api_key_env} is not set")
+
+    # Enforce prompt token limit
+    prompt = truncate_prompt_to_token_limit(prompt, config.max_prompt_tokens, label)
+    prompt_tokens = estimate_tokens(prompt)
+    if prompt_tokens > config.max_prompt_tokens:
+        print(f"warning: prompt ~{prompt_tokens} tokens still exceeds limit {config.max_prompt_tokens} after truncation",
+              file=sys.stderr)
+
     url = config.llm_base_url.rstrip("/") + "/chat/completions"
     payload = {
         "model": config.llm_model,
@@ -1295,6 +1337,7 @@ def call_llm(config: Config, prompt: str) -> dict[str, Any]:
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.2,
+        "max_tokens": config.max_response_tokens,
     }
     req = urllib.request.Request(
         url,
@@ -1776,6 +1819,8 @@ def write_example_config(path: Path) -> None:
         "runner_output": "tests/auto_cunit_runner.c",
         "max_functions_per_prompt": 8,
         "extra_prompt": "Prefer testing public APIs; create local stubs only when necessary.",
+        "max_prompt_tokens": 12000,
+        "max_response_tokens": 4096,
         "instrument_dir": "mcdc_instrumented",
         "mcdc_trace_file": "mcdc_trace.txt",
         "compile_test_command": "",
