@@ -354,6 +354,31 @@ class BoolExpr:
             return all(child.is_pure_or() for child in self.children)
         return True
 
+    def evaluate(self, leaf_values: dict[str, bool]) -> bool:
+        """Evaluate the boolean expression given values for each leaf condition.
+
+        leaf_values maps leaf condition text to True/False.
+        Short-circuit semantics are respected: in A && B, if A is False,
+        B is not evaluated; in A || B, if A is True, B is not evaluated.
+        """
+        if self.kind == "leaf":
+            return leaf_values.get(self.value, False)
+        if self.kind == "not":
+            if not self.children:
+                return False
+            return not self.children[0].evaluate(leaf_values)
+        if self.kind == "and":
+            for child in self.children:
+                if not child.evaluate(leaf_values):
+                    return False
+            return True
+        if self.kind == "or":
+            for child in self.children:
+                if child.evaluate(leaf_values):
+                    return True
+            return False
+        return False
+
 
 def _find_top_level_split(text: str, operator: str) -> list[str]:
     """Split text at top-level occurrences of operator (&& or ||)."""
@@ -490,6 +515,161 @@ def generate_mcdc_pairs(decision: Decision) -> list[MCDCPair]:
             )
         )
     return pairs
+
+
+@dataclasses.dataclass
+class TruthTableRow:
+    """One row of a decision's truth table."""
+    condition_values: list[bool]  # value of each condition
+    decision_result: bool         # overall decision outcome
+
+
+@dataclasses.dataclass
+class MCDCDemoPair:
+    """Two truth-table rows that demonstrate MC/DC independence for one condition."""
+    condition_index: int
+    condition_text: str
+    row_true: TruthTableRow   # row where condition=True and decision=True
+    row_false: TruthTableRow  # row where condition=False and decision=False
+
+
+def compute_truth_table(decision: Decision) -> list[TruthTableRow]:
+    """Compute the logical truth table for a decision.
+
+    Uses the BoolExpr tree to evaluate all 2^N combinations of condition
+    values, respecting short-circuit semantics.
+    """
+    conditions = decision.conditions
+    n = len(conditions)
+    if n == 0:
+        return []
+
+    tree = parse_bool_expr(decision.expression)
+    rows: list[TruthTableRow] = []
+
+    for combo in range(1 << n):
+        cond_vals = [(combo >> (n - 1 - i)) & 1 == 1 for i in range(n)]
+        leaf_values = dict(zip(conditions, cond_vals))
+        result = tree.evaluate(leaf_values)
+        rows.append(TruthTableRow(
+            condition_values=cond_vals,
+            decision_result=result,
+        ))
+
+    return rows
+
+
+def find_mcdc_demo_pairs(decision: Decision) -> list[MCDCDemoPair]:
+    """For each condition, find two truth-table rows that demonstrate MC/DC independence.
+
+    For condition C at index i, we need two rows where:
+    1. C is True in one row and False in the other
+    2. All other conditions have the SAME value in both rows
+    3. The decision result differs between the two rows
+
+    Returns one MCDCDemoPair per condition if such a pair exists.
+    """
+    conditions = decision.conditions
+    n = len(conditions)
+    if n == 0:
+        return []
+
+    rows = compute_truth_table(decision)
+    demos: list[MCDCDemoPair] = []
+
+    for i in range(n):
+        # Group rows by the values of all conditions EXCEPT condition i
+        groups: dict[tuple[bool, ...], list[TruthTableRow]] = {}
+        for row in rows:
+            key = tuple(
+                row.condition_values[j] for j in range(n) if j != i
+            )
+            groups.setdefault(key, []).append(row)
+
+        # In each group, look for two rows that differ only in condition i
+        # and have different decision results
+        found = False
+        for key, group_rows in groups.items():
+            true_rows = [r for r in group_rows if r.condition_values[i]]
+            false_rows = [r for r in group_rows if not r.condition_values[i]]
+            for tr in true_rows:
+                for fr in false_rows:
+                    if tr.decision_result != fr.decision_result:
+                        demos.append(MCDCDemoPair(
+                            condition_index=i,
+                            condition_text=conditions[i],
+                            row_true=tr,
+                            row_false=fr,
+                        ))
+                        found = True
+                        break
+                if found:
+                    break
+            if found:
+                break
+
+    return demos
+
+
+def format_truth_table_for_prompt(decision: Decision) -> str:
+    """Format a decision's truth table and MC/DC demo pairs for inclusion in LLM prompt."""
+    conditions = decision.conditions
+    n = len(conditions)
+    if n == 0:
+        return ""
+
+    rows = compute_truth_table(decision)
+    demos = find_mcdc_demo_pairs(decision)
+
+    lines: list[str] = []
+    lines.append(f"Decision: {decision.expression} (line {decision.line})")
+    lines.append(f"Conditions: {conditions}")
+    lines.append("")
+
+    # Truth table header
+    header = " | ".join(f"C{i}" for i in range(n)) + " | Result"
+    sep = "-+-".join("---" for _ in range(n + 1))
+    lines.append(header)
+    lines.append(sep)
+
+    for row in rows:
+        vals = " | ".join(" T" if v else " F" for v in row.condition_values)
+        res = " T" if row.decision_result else " F"
+        lines.append(f"{vals} |{res}")
+
+    lines.append("")
+
+    # MC/DC demo pairs
+    if demos:
+        lines.append("MC/DC independence pairs (expected test outcomes):")
+        for demo in demos:
+            t_vals = ", ".join(
+                f"C{j}={'T' if demo.row_true.condition_values[j] else 'F'}"
+                for j in range(n)
+            )
+            f_vals = ", ".join(
+                f"C{j}={'T' if demo.row_false.condition_values[j] else 'F'}"
+                for j in range(n)
+            )
+            lines.append(
+                f"  Condition {demo.condition_index} ({demo.condition_text}):"
+            )
+            lines.append(
+                f"    Test A: [{t_vals}] → decision = "
+                f"{'True' if demo.row_true.decision_result else 'False'}"
+            )
+            lines.append(
+                f"    Test B: [{f_vals}] → decision = "
+                f"{'True' if demo.row_false.decision_result else 'False'}"
+            )
+            lines.append(
+                f"    Only C{demo.condition_index} differs; all other conditions are the same."
+            )
+    else:
+        lines.append("WARNING: No MC/DC independence pair found for this decision.")
+        lines.append("This may indicate a coupled or redundant condition.")
+
+    return "\n".join(lines)
 
 
 def parse_mcdc_trace_file(trace_path: Path) -> list[ConditionTrace]:
@@ -780,6 +960,13 @@ def build_mcdc_feedback_prompt(config: Config, uncovered_pairs: list[MCDCPair], 
 
     mcdc_requirements = MCDC_REQUIREMENTS
 
+    # Generate truth tables for decisions that have uncovered pairs
+    uncovered_decision_files_lines = {(p.decision_file, p.decision_line) for p in uncovered_pairs}
+    relevant_decisions = [d for d in decisions if (d.file, d.line) in uncovered_decision_files_lines]
+    truth_table_blob = "\n\n".join(
+        format_truth_table_for_prompt(d) for d in relevant_decisions
+    ) if relevant_decisions else ""
+
     return textwrap.dedent(
         f"""
         You are generating additional CUnit tests to achieve MC/DC coverage for a C project.
@@ -804,10 +991,13 @@ def build_mcdc_feedback_prompt(config: Config, uncovered_pairs: list[MCDCPair], 
         - Name each test to indicate which condition and pair it covers, e.g.:
           test_<file>_<line>_cond<idx>_independence.
         - In each test, use CU_ASSERT to verify the decision outcome.
+          The EXPECTED decision outcome for each MC/DC pair is given in the truth tables below.
+          You MUST use the expected outcome from the truth table, NOT guess from the source code.
         - Add a comment above each test explaining:
           1. Which condition is being tested for independence.
           2. What values the OTHER conditions are fixed to and why.
           3. How the two test cases in the pair differ only in the target condition.
+          4. What the expected decision outcome is for each test case.
         - Pay special attention to short-circuit evaluation: make sure the condition
           being tested is actually reachable (not short-circuited) in both test cases.
 
@@ -820,6 +1010,9 @@ def build_mcdc_feedback_prompt(config: Config, uncovered_pairs: list[MCDCPair], 
 
         Uncovered MC/DC pairs ({len(uncovered_info)} total):
         {json.dumps(uncovered_info, ensure_ascii=False, indent=2)}
+
+        Truth tables and expected test outcomes (USE THESE for CU_ASSERT expected values):
+        {truth_table_blob}
 
         Source excerpts:
         {source_blob}
@@ -1061,6 +1254,12 @@ def build_prompt(config: Config, decisions: list[Decision]) -> str:
         }
         for d in selected_decisions
     ]
+
+    # Generate truth tables and expected outcomes for each decision
+    truth_table_blob = "\n\n".join(
+        format_truth_table_for_prompt(d) for d in selected_decisions
+    )
+
     include_flags = " ".join(f"-I{item}" for item in config.include_dirs)
 
     mcdc_requirements = MCDC_REQUIREMENTS
@@ -1088,7 +1287,10 @@ def build_prompt(config: Config, decisions: list[Decision]) -> str:
           test_decision_line{selected_decisions[0].line if selected_decisions else 'N'}_cond0_true,
           test_decision_line{selected_decisions[0].line if selected_decisions else 'N'}_cond0_false.
         - In each test, use CU_ASSERT to verify the decision outcome (True or False).
-        - Add a comment above each test explaining which MC/DC pair it satisfies.
+          The EXPECTED decision outcome for each MC/DC pair is given in the truth tables below.
+          You MUST use the expected outcome from the truth table, NOT guess from the source code.
+        - Add a comment above each test explaining which MC/DC pair it satisfies and
+          what the expected outcome is.
 
         {mcdc_requirements}
 
@@ -1104,6 +1306,9 @@ def build_prompt(config: Config, decisions: list[Decision]) -> str:
 
         Decisions and MC/DC obligations:
         {json.dumps(decision_payload, ensure_ascii=False, indent=2)}
+
+        Truth tables and expected test outcomes (USE THESE for CU_ASSERT expected values):
+        {truth_table_blob}
 
         Source excerpts:
         {source_blob}
@@ -1351,6 +1556,14 @@ def build_function_prompt(config: Config, functions: list[CFunction], batch_id: 
 
     mcdc_requirements = MCDC_REQUIREMENTS
 
+    # Generate truth tables for all decisions in this batch
+    all_decisions: list[Decision] = []
+    for function in functions:
+        all_decisions.extend(function.decisions)
+    truth_table_blob = "\n\n".join(
+        format_truth_table_for_prompt(d) for d in all_decisions
+    ) if all_decisions else ""
+
     return textwrap.dedent(
         f"""
         You are generating CUnit tests for a C project, one batch at a time.
@@ -1381,8 +1594,10 @@ def build_function_prompt(config: Config, functions: list[CFunction], batch_id: 
         - Name each test to indicate which condition it covers, e.g.:
           test_<func>_<line>_cond0_true, test_<func>_<line>_cond0_false.
         - In each test, use CU_ASSERT to verify the decision outcome (True or False).
-        - Add a comment above each test explaining which MC/DC pair it satisfies and why
-          the other conditions are held fixed.
+          The EXPECTED decision outcome for each MC/DC pair is given in the truth tables below.
+          You MUST use the expected outcome from the truth table, NOT guess from the source code.
+        - Add a comment above each test explaining which MC/DC pair it satisfies, why
+          the other conditions are held fixed, and what the expected outcome is.
 
         {mcdc_requirements}
 
@@ -1393,6 +1608,9 @@ def build_function_prompt(config: Config, functions: list[CFunction], batch_id: 
 
         Target functions:
         {json.dumps(function_payload, ensure_ascii=False, indent=2)}
+
+        Truth tables and expected test outcomes (USE THESE for CU_ASSERT expected values):
+        {truth_table_blob}
 
         Source excerpts:
         {source_blob}
