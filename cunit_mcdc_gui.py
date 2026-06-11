@@ -14,7 +14,7 @@ import traceback
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from typing import Any, Callable
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import cunit_mcdc_tool as core
 
@@ -22,11 +22,11 @@ import cunit_mcdc_tool as core
 APP_TITLE = "CUnit MC/DC AI Test Generator"
 
 
-def list_to_lines(items: list[str]) -> str:
+def list_to_lines(items: List[str]) -> str:
     return "\n".join(items)
 
 
-def lines_to_list(text: str) -> list[str]:
+def lines_to_list(text: str) -> List[str]:
     return [line.strip() for line in text.splitlines() if line.strip()]
 
 
@@ -39,9 +39,9 @@ class App(tk.Tk):
         self.geometry("1280x780")
         self.minsize(980, 640)
 
-        self.config_path: Path | None = None
-        self.worker: threading.Thread | None = None
-        self.events: queue.Queue[tuple[str, Any]] = queue.Queue()
+        self.config_path: Optional[Path] = None
+        self.worker: Optional[threading.Thread] = None
+        self.events: queue.Queue[Tuple[str, Any]] = queue.Queue()
 
         self.vars = {
             "project_root": tk.StringVar(),
@@ -172,7 +172,7 @@ class App(tk.Tk):
         row: int,
         label: str,
         var_name: str,
-        browse: Callable[[], None] | None = None,
+        browse: Optional[Callable[[], None]] = None,
         show: str = "",
     ) -> None:
         ttk.Label(tab, text=label).grid(row=row, column=0, sticky=tk.W, pady=2)
@@ -324,7 +324,7 @@ class App(tk.Tk):
             core.write_example_config(path)
             self.open_config(path)
 
-    def open_config(self, path: Path | None = None) -> None:
+    def open_config(self, path: Optional[Path] = None) -> None:
         if not path:
             selected = filedialog.askopenfilename(
                 title="Open config",
@@ -339,7 +339,7 @@ class App(tk.Tk):
         self.title(f"{APP_TITLE}  [{path.name}]")
         self._load_raw_config(json.loads(path.read_text(encoding="utf-8-sig")))
 
-    def _load_raw_config(self, raw: dict[str, Any]) -> None:
+    def _load_raw_config(self, raw: Dict[str, Any]) -> None:
         proot = raw.get("project_root", ".")
         self.vars["project_root"].set(proot)
         self.vars["source_globs"].set(
@@ -401,7 +401,7 @@ class App(tk.Tk):
             self.config_entry.insert(0, str(self.config_path))
             self.save_config()
 
-    def _raw_config_from_ui(self) -> dict[str, Any]:
+    def _raw_config_from_ui(self) -> Dict[str, Any]:
         def _read(widget):
             return [ln.strip()
                     for ln in widget.get("1.0", tk.END).splitlines()
@@ -546,8 +546,8 @@ class App(tk.Tk):
         build_results = core.run_commands(config.build_commands, config.project_root)
         self.events.put(("log", f"Build: {core.command_group_status(build_results)}"))
         if any(item["returncode"] != 0 for item in build_results):
-            test_results: list[dict[str, Any]] = []
-            coverage_results: list[dict[str, Any]] = []
+            test_results: List[Dict[str, Any]] = []
+            coverage_results: List[Dict[str, Any]] = []
             self.events.put(("log", "Build failed, skipping tests"))
         else:
             test_results = core.run_commands(config.test_commands, config.project_root)
@@ -576,8 +576,8 @@ class App(tk.Tk):
         build_results = core.run_commands(config.build_commands, config.project_root)
         self.events.put(("log", f"Build: {core.command_group_status(build_results)}"))
         if any(item["returncode"] != 0 for item in build_results):
-            test_results: list[dict[str, Any]] = []
-            coverage_results: list[dict[str, Any]] = []
+            test_results: List[Dict[str, Any]] = []
+            coverage_results: List[Dict[str, Any]] = []
             self.events.put(("log", "Build failed, skipping tests"))
         else:
             test_results = core.run_commands(config.test_commands, config.project_root)
@@ -618,7 +618,7 @@ class App(tk.Tk):
             pass
         self.after(200, self._drain_events)
 
-    def show_decisions(self, decisions: list[core.Decision]) -> None:
+    def show_decisions(self, decisions: List[core.Decision]) -> None:
         for item in self.decision_tree.get_children():
             self.decision_tree.delete(item)
         for decision in decisions:
@@ -629,7 +629,7 @@ class App(tk.Tk):
             )
         self.result_notebook.select(self.decision_tree.master)
 
-    def show_functions(self, functions: list[core.CFunction]) -> None:
+    def show_functions(self, functions: List[core.CFunction]) -> None:
         for item in self.function_tree.get_children():
             self.function_tree.delete(item)
         for function in functions:
@@ -678,7 +678,7 @@ class App(tk.Tk):
 
 
 
-def format_report_summary(report: dict[str, Any]) -> str:
+def format_report_summary(report: Dict[str, Any]) -> str:
     coverage = report.get("coverage_summary", {})
 
     def pct(key: str) -> str:
@@ -732,7 +732,7 @@ def format_report_summary(report: dict[str, Any]) -> str:
 
 
 if not hasattr(core, "load_config_from_raw"):
-    def _load_config_from_raw(raw: dict[str, Any]) -> core.Config:
+    def _load_config_from_raw(raw: Dict[str, Any]) -> core.Config:
         root = Path(raw.get("project_root", ".")).expanduser().resolve()
 
         def _csv(name, fallback):

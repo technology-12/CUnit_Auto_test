@@ -29,7 +29,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 
 DEFAULT_MODEL = "gpt-4.1"
@@ -158,7 +158,7 @@ class Decision:
     file: str
     line: int
     expression: str
-    conditions: list[str]
+    conditions: List[str]
 
 
 @dataclasses.dataclass
@@ -169,23 +169,23 @@ class CFunction:
     start_line: int
     end_line: int
     is_static: bool
-    decisions: list[Decision]
+    decisions: List[Decision]
     function_body: str = ""
-    called_functions: list[str] = dataclasses.field(default_factory=list)
-    used_structs: list[str] = dataclasses.field(default_factory=list)
-    used_macros: list[str] = dataclasses.field(default_factory=list)
-    required_headers: list[str] = dataclasses.field(default_factory=list)
+    called_functions: List[str] = dataclasses.field(default_factory=list)
+    used_structs: List[str] = dataclasses.field(default_factory=list)
+    used_macros: List[str] = dataclasses.field(default_factory=list)
+    required_headers: List[str] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
 class Config:
     project_root: Path
-    source_globs: list[str]
-    include_dirs: list[str]
+    source_globs: List[str]
+    include_dirs: List[str]
     test_output: Path
-    build_commands: list[str]
-    test_commands: list[str]
-    coverage_commands: list[str]
+    build_commands: List[str]
+    test_commands: List[str]
+    coverage_commands: List[str]
     llm_base_url: str
     llm_api_key_env: str
     llm_model: str
@@ -236,8 +236,8 @@ def load_config(path: Path) -> Config:
     )
 
 
-def iter_source_files(config: Config) -> list[Path]:
-    files: set[Path] = set()
+def iter_source_files(config: Config) -> List[Path]:
+    files: Set[Path] = set()
     ignored_parts = {".git", "build", "cmake-build-debug", "cmake-build-release"}
     for pattern in config.source_globs:
         for path in config.project_root.glob(pattern):
@@ -250,7 +250,7 @@ def iter_source_files(config: Config) -> list[Path]:
 
 
 def strip_comments_and_strings(source: str) -> str:
-    result: list[str] = []
+    result: List[str] = []
     i = 0
     state = "code"
     while i < len(source):
@@ -311,7 +311,7 @@ def strip_comments_and_strings(source: str) -> str:
     return "".join(result)
 
 
-def find_matching_paren(text: str, open_index: int) -> int | None:
+def find_matching_paren(text: str, open_index: int) -> Optional[int]:
     depth = 0
     for i in range(open_index, len(text)):
         if text[i] == "(":
@@ -323,7 +323,7 @@ def find_matching_paren(text: str, open_index: int) -> int | None:
     return None
 
 
-def extract_parenthesized_after_keyword(text: str, keyword: str) -> Iterable[tuple[int, str]]:
+def extract_parenthesized_after_keyword(text: str, keyword: str) -> Iterable[Tuple[int, str]]:
     pattern = re.compile(r"\b" + re.escape(keyword) + r"\s*\(")
     for match in pattern.finditer(text):
         open_index = text.find("(", match.start())
@@ -333,17 +333,17 @@ def extract_parenthesized_after_keyword(text: str, keyword: str) -> Iterable[tup
         yield match.start(), text[open_index + 1 : close_index].strip()
 
 
-def extract_for_condition(text: str) -> Iterable[tuple[int, str]]:
+def extract_for_condition(text: str) -> Iterable[Tuple[int, str]]:
     for start, body in extract_parenthesized_after_keyword(text, "for"):
         parts = split_top_level(body, ";")
         if len(parts) >= 2 and parts[1].strip():
             yield start, parts[1].strip()
 
 
-def split_top_level(text: str, separator: str) -> list[str]:
-    parts: list[str] = []
+def split_top_level(text: str, separator: str) -> List[str]:
+    parts: List[str] = []
     depth = 0
-    current: list[str] = []
+    current: List[str] = []
     for ch in text:
         if ch == "(":
             depth += 1
@@ -361,10 +361,10 @@ def split_top_level(text: str, separator: str) -> list[str]:
 CONDITION_SPLIT_RE = re.compile(r"(\&\&|\|\|)")
 
 
-def split_conditions(expression: str) -> list[str]:
+def split_conditions(expression: str) -> List[str]:
     tokens = CONDITION_SPLIT_RE.split(expression)
-    conditions: list[str] = []
-    current: list[str] = []
+    conditions: List[str] = []
+    current: List[str] = []
     depth = 0
     for token in tokens:
         if token in {"&&", "||"} and depth == 0:
@@ -405,14 +405,14 @@ class BoolExpr:
     """Represents a node in a boolean expression tree."""
     kind: str  # "leaf", "and", "or", "not"
     value: str = ""  # for leaf nodes: the condition text
-    children: list[BoolExpr] = dataclasses.field(default_factory=list)
+    children: List[BoolExpr] = dataclasses.field(default_factory=list)
     operator: str = ""  # "&&" or "||" for and/or nodes
 
-    def leaf_conditions(self) -> list[str]:
+    def leaf_conditions(self) -> List[str]:
         """Return all leaf conditions in order."""
         if self.kind == "leaf":
             return [self.value]
-        result: list[str] = []
+        result: List[str] = []
         for child in self.children:
             result.extend(child.leaf_conditions())
         return result
@@ -441,7 +441,7 @@ class BoolExpr:
             return all(child.is_pure_or() for child in self.children)
         return True
 
-    def evaluate(self, leaf_values: dict[str, bool]) -> bool:
+    def evaluate(self, leaf_values: Dict[str, bool]) -> bool:
         """Evaluate the boolean expression given values for each leaf condition.
 
         leaf_values maps leaf condition text to True/False.
@@ -467,11 +467,11 @@ class BoolExpr:
         return False
 
 
-def _find_top_level_split(text: str, operator: str) -> list[str]:
+def _find_top_level_split(text: str, operator: str) -> List[str]:
     """Split text at top-level occurrences of operator (&& or ||)."""
-    parts: list[str] = []
+    parts: List[str] = []
     depth = 0
-    current: list[str] = []
+    current: List[str] = []
     i = 0
     while i < len(text):
         ch = text[i]
@@ -525,7 +525,7 @@ def parse_bool_expr(text: str) -> BoolExpr:
     return BoolExpr(kind="leaf", value=text.strip())
 
 
-def split_conditions_advanced(expression: str) -> list[str]:
+def split_conditions_advanced(expression: str) -> List[str]:
     """Split conditions using the BoolExpr tree parser for correct nested handling."""
     tree = parse_bool_expr(expression)
     return tree.leaf_conditions()
@@ -534,7 +534,7 @@ def split_conditions_advanced(expression: str) -> list[str]:
 # ── Do-while detection ──
 
 
-def extract_do_while_conditions(text: str) -> Iterable[tuple[int, str]]:
+def extract_do_while_conditions(text: str) -> Iterable[Tuple[int, str]]:
     """Find do { ... } while(cond); patterns and extract the condition with the line of the while keyword."""
     do_pattern = re.compile(r"\bdo\s*\{")
     for do_match in do_pattern.finditer(text):
@@ -588,10 +588,10 @@ class ConditionTrace:
     test_name: str
 
 
-def generate_mcdc_pairs(decision: Decision) -> list[MCDCPair]:
+def generate_mcdc_pairs(decision: Decision) -> List[MCDCPair]:
     """Generate all MC/DC pairs for a decision. For each condition, we need a pair
     of tests where only that condition changes and the decision outcome changes."""
-    pairs: list[MCDCPair] = []
+    pairs: List[MCDCPair] = []
     for idx, condition in enumerate(decision.conditions):
         pairs.append(
             MCDCPair(
@@ -607,7 +607,7 @@ def generate_mcdc_pairs(decision: Decision) -> list[MCDCPair]:
 @dataclasses.dataclass
 class TruthTableRow:
     """One row of a decision's truth table."""
-    condition_values: list[bool]  # value of each condition
+    condition_values: List[bool]  # value of each condition
     decision_result: bool         # overall decision outcome
 
 
@@ -620,7 +620,7 @@ class MCDCDemoPair:
     row_false: TruthTableRow  # row where condition=False and decision=False
 
 
-def compute_truth_table(decision: Decision) -> list[TruthTableRow]:
+def compute_truth_table(decision: Decision) -> List[TruthTableRow]:
     """Compute the logical truth table for a decision.
 
     Uses the BoolExpr tree to evaluate all 2^N combinations of condition
@@ -632,7 +632,7 @@ def compute_truth_table(decision: Decision) -> list[TruthTableRow]:
         return []
 
     tree = parse_bool_expr(decision.expression)
-    rows: list[TruthTableRow] = []
+    rows: List[TruthTableRow] = []
 
     for combo in range(1 << n):
         cond_vals = [(combo >> (n - 1 - i)) & 1 == 1 for i in range(n)]
@@ -646,7 +646,7 @@ def compute_truth_table(decision: Decision) -> list[TruthTableRow]:
     return rows
 
 
-def find_mcdc_demo_pairs(decision: Decision) -> list[MCDCDemoPair]:
+def find_mcdc_demo_pairs(decision: Decision) -> List[MCDCDemoPair]:
     """For each condition, find two truth-table rows that demonstrate MC/DC independence.
 
     For condition C at index i, we need two rows where:
@@ -662,11 +662,11 @@ def find_mcdc_demo_pairs(decision: Decision) -> list[MCDCDemoPair]:
         return []
 
     rows = compute_truth_table(decision)
-    demos: list[MCDCDemoPair] = []
+    demos: List[MCDCDemoPair] = []
 
     for i in range(n):
         # Group rows by the values of all conditions EXCEPT condition i
-        groups: dict[tuple[bool, ...], list[TruthTableRow]] = {}
+        groups: Dict[Tuple[bool, ...], List[TruthTableRow]] = {}
         for row in rows:
             key = tuple(
                 row.condition_values[j] for j in range(n) if j != i
@@ -708,7 +708,7 @@ def format_truth_table_for_prompt(decision: Decision) -> str:
     rows = compute_truth_table(decision)
     demos = find_mcdc_demo_pairs(decision)
 
-    lines: list[str] = []
+    lines: List[str] = []
     lines.append(f"Decision: {decision.expression} (line {decision.line})")
     lines.append(f"Conditions: {conditions}")
     lines.append("")
@@ -759,12 +759,12 @@ def format_truth_table_for_prompt(decision: Decision) -> str:
     return "\n".join(lines)
 
 
-def parse_mcdc_trace_file(trace_path: Path) -> list[ConditionTrace]:
+def parse_mcdc_trace_file(trace_path: Path) -> List[ConditionTrace]:
     """Parse the trace file produced by instrumented code.
     The trace format is one record per line:
     MCDC_TRACE:decision_id:condition_index:value:decision_result:test_name
     """
-    traces: list[ConditionTrace] = []
+    traces: List[ConditionTrace] = []
     if not trace_path.exists():
         return traces
     for line in trace_path.read_text(encoding="utf-8", errors="ignore").splitlines():
@@ -794,21 +794,21 @@ def parse_mcdc_trace_file(trace_path: Path) -> list[ConditionTrace]:
     return traces
 
 
-def evaluate_mcdc_coverage(decisions: list[Decision], traces: list[ConditionTrace]) -> list[MCDCPair]:
+def evaluate_mcdc_coverage(decisions: List[Decision], traces: List[ConditionTrace]) -> List[MCDCPair]:
     """For each decision and each condition, check if there exist two traces where:
     - Only that condition's value differs
     - All other conditions have the same values
     - The decision outcome differs
     If such a pair exists, mark the MCDCPair as satisfied."""
-    all_pairs: list[MCDCPair] = []
+    all_pairs: List[MCDCPair] = []
     for decision in decisions:
         decision_id = make_decision_id(decision.file, decision.line)
         num_conditions = len(decision.conditions)
         decision_traces = [t for t in traces if t.decision_id == decision_id]
 
         # Group traces by test name to get per-test condition vectors
-        test_vectors: dict[str, list[bool | None]] = {}
-        test_decision_results: dict[str, bool] = {}
+        test_vectors: Dict[str, List[Optional[bool]]] = {}
+        test_decision_results: Dict[str, bool] = {}
         for trace in decision_traces:
             if trace.test_name not in test_vectors:
                 test_vectors[trace.test_name] = [None] * num_conditions
@@ -860,7 +860,7 @@ def evaluate_mcdc_coverage(decisions: list[Decision], traces: list[ConditionTrac
     return all_pairs
 
 
-def compute_mcdc_coverage_percent(pairs: list[MCDCPair]) -> float:
+def compute_mcdc_coverage_percent(pairs: List[MCDCPair]) -> float:
     """Return the percentage of satisfied MCDC pairs."""
     if not pairs:
         return 0.0
@@ -924,7 +924,7 @@ def generate_instrumentation_header(output_path: Path) -> Path:
     return output_path
 
 
-def instrument_source(source: str, decisions: list[Decision], file_rel: str) -> str:
+def instrument_source(source: str, decisions: List[Decision], file_rel: str) -> str:
     """Transform C source code by inserting MCDC_COND macros around each condition in each decision."""
     lines = source.split("\n")
     # Process decisions in reverse line order to avoid offset issues
@@ -963,7 +963,7 @@ def instrument_source(source: str, decisions: list[Decision], file_rel: str) -> 
     return "\n".join(result_lines)
 
 
-def instrument_project(config: Config, decisions: list[Decision]) -> list[Path]:
+def instrument_project(config: Config, decisions: List[Decision]) -> List[Path]:
     """For each source file that has decisions, create an instrumented copy in
     {project_root}/mcdc_instrumented/ directory. Also generate the instrumentation header there."""
     config.instrument_dir.mkdir(parents=True, exist_ok=True)
@@ -972,11 +972,11 @@ def instrument_project(config: Config, decisions: list[Decision]) -> list[Path]:
     header_path = generate_instrumentation_header(config.instrument_dir / "mcdc_instrumentation.h")
 
     # Group decisions by file
-    decisions_by_file: dict[str, list[Decision]] = {}
+    decisions_by_file: Dict[str, List[Decision]] = {}
     for decision in decisions:
         decisions_by_file.setdefault(decision.file, []).append(decision)
 
-    generated_paths: list[Path] = [header_path]
+    generated_paths: List[Path] = [header_path]
     for rel_file, file_decisions in decisions_by_file.items():
         src_path = (config.project_root / rel_file).resolve()
         if not src_path.exists():
@@ -994,7 +994,7 @@ def instrument_project(config: Config, decisions: list[Decision]) -> list[Path]:
 # ── Test compilation verification ──
 
 
-def try_compile_test(config: Config, test_source_path: Path) -> tuple[bool, str]:
+def try_compile_test(config: Config, test_source_path: Path) -> Tuple[bool, str]:
     """Attempt to compile the test file using the project's include dirs.
     Returns (success, error_output). If compilation fails, returns the error message."""
     if not config.compile_test_command:
@@ -1024,7 +1024,7 @@ def try_compile_test(config: Config, test_source_path: Path) -> tuple[bool, str]
 # ── MC/DC feedback prompt ──
 
 
-def build_mcdc_feedback_prompt(config: Config, uncovered_pairs: list[MCDCPair], decisions: list[Decision]) -> str:
+def build_mcdc_feedback_prompt(config: Config, uncovered_pairs: List[MCDCPair], decisions: List[Decision]) -> str:
     """Create a prompt specifically asking the LLM to generate tests for the uncovered MC/DC pairs."""
     uncovered_info = []
     for pair in uncovered_pairs:
@@ -1107,14 +1107,14 @@ def build_mcdc_feedback_prompt(config: Config, uncovered_pairs: list[MCDCPair], 
     ).strip()
 
 
-def discover_decisions(config: Config) -> list[Decision]:
-    decisions: list[Decision] = []
+def discover_decisions(config: Config) -> List[Decision]:
+    decisions: List[Decision] = []
     keywords = ["if", "while", "switch"]
     for path in iter_source_files(config):
         raw = path.read_text(encoding="utf-8-sig", errors="ignore")
         clean = strip_comments_and_strings(raw)
         rel = str(path.relative_to(config.project_root))
-        found: list[tuple[int, str]] = []
+        found: List[Tuple[int, str]] = []
         for keyword in keywords:
             found.extend(extract_parenthesized_after_keyword(clean, keyword))
         found.extend(extract_for_condition(clean))
@@ -1133,13 +1133,13 @@ def discover_decisions(config: Config) -> list[Decision]:
     return decisions
 
 
-def discover_functions(config: Config) -> list[CFunction]:
+def discover_functions(config: Config) -> List[CFunction]:
     all_decisions = discover_decisions(config)
-    decisions_by_file: dict[str, list[Decision]] = {}
+    decisions_by_file: Dict[str, List[Decision]] = {}
     for decision in all_decisions:
         decisions_by_file.setdefault(decision.file, []).append(decision)
 
-    functions: list[CFunction] = []
+    functions: List[CFunction] = []
     for path in iter_source_files(config):
         if path.suffix.lower() != ".c":
             continue
@@ -1151,8 +1151,8 @@ def discover_functions(config: Config) -> list[CFunction]:
     return functions
 
 
-def extract_functions_from_clean_source(clean: str, rel_file: str, decisions: list[Decision]) -> list[CFunction]:
-    functions: list[CFunction] = []
+def extract_functions_from_clean_source(clean: str, rel_file: str, decisions: List[Decision]) -> List[CFunction]:
+    functions: List[CFunction] = []
     index = 0
     while index < len(clean):
         brace = clean.find("{", index)
@@ -1196,7 +1196,7 @@ def extract_functions_from_clean_source(clean: str, rel_file: str, decisions: li
     return functions
 
 
-def possible_function_header(clean: str, brace_index: int) -> str | None:
+def possible_function_header(clean: str, brace_index: int) -> Optional[str]:
     prefix = clean[:brace_index].rstrip()
     if not prefix.endswith(")"):
         return None
@@ -1224,7 +1224,7 @@ def possible_function_header(clean: str, brace_index: int) -> str | None:
     return header
 
 
-def find_open_paren_backward(text: str, close_index: int) -> int | None:
+def find_open_paren_backward(text: str, close_index: int) -> Optional[int]:
     depth = 0
     for index in range(close_index, -1, -1):
         ch = text[index]
@@ -1237,7 +1237,7 @@ def find_open_paren_backward(text: str, close_index: int) -> int | None:
     return None
 
 
-def find_matching_brace(text: str, open_index: int) -> int | None:
+def find_matching_brace(text: str, open_index: int) -> Optional[int]:
     depth = 0
     for index in range(open_index, len(text)):
         ch = text[index]
@@ -1250,7 +1250,7 @@ def find_matching_brace(text: str, open_index: int) -> int | None:
     return None
 
 
-def extract_function_name(header: str) -> str | None:
+def extract_function_name(header: str) -> Optional[str]:
     match = re.search(r"([A-Za-z_]\w*)\s*\([^()]*\)\s*$", header, re.S)
     if not match:
         return None
@@ -1275,9 +1275,9 @@ def extract_function_body(clean: str, brace_index: int) -> str:
     return clean[brace_index:end + 1]
 
 
-def extract_called_functions(clean: str, body: str) -> list[str]:
+def extract_called_functions(clean: str, body: str) -> List[str]:
     """Find function calls inside the body (name + '(' patterns), excluding keywords."""
-    calls: set[str] = set()
+    calls: Set[str] = set()
     # Match identifiers followed by '(' that are not C keywords
     for match in re.finditer(r"\b([A-Za-z_]\w+)\s*\(", body):
         name = match.group(1)
@@ -1290,12 +1290,12 @@ _STRUCT_RE = re.compile(r"\bstruct\s+([A-Za-z_]\w*)")
 _MACRO_RE = re.compile(r"\b([A-Z][A-Z0-9_]{2,})\b")
 
 
-def extract_used_structs(clean: str, body: str) -> list[str]:
+def extract_used_structs(clean: str, body: str) -> List[str]:
     """Find struct type names referenced in the function body."""
     return sorted(set(_STRUCT_RE.findall(body)))
 
 
-def extract_used_macros(clean: str, body: str) -> list[str]:
+def extract_used_macros(clean: str, body: str) -> List[str]:
     """Find macro-like identifiers (SCREAMING_SNAKE_CASE) in the function body."""
     return sorted(set(_MACRO_RE.findall(body)))
 
@@ -1303,12 +1303,12 @@ def extract_used_macros(clean: str, body: str) -> list[str]:
 _HEADER_RE = re.compile(r'^\s*#\s*include\s+([<"][^>"]+[>"])', re.MULTILINE)
 
 
-def extract_required_headers(source: str) -> list[str]:
+def extract_required_headers(source: str) -> List[str]:
     """Extract all #include directives from the source file."""
     return _HEADER_RE.findall(source)
 
 
-def mcdc_obligations(decision: Decision) -> list[dict[str, Any]]:
+def mcdc_obligations(decision: Decision) -> List[Dict[str, Any]]:
     obligations = []
     condition_count = len(decision.conditions)
     if condition_count == 1:
@@ -1327,7 +1327,7 @@ def mcdc_obligations(decision: Decision) -> list[dict[str, Any]]:
     return obligations
 
 
-def build_prompt(config: Config, decisions: list[Decision]) -> str:
+def build_prompt(config: Config, decisions: List[Decision]) -> str:
     selected_decisions = decisions[: config.max_decisions_per_prompt]
     omitted_decision_count = max(0, len(decisions) - len(selected_decisions))
     source_blob = build_source_context(config, selected_decisions)
@@ -1403,13 +1403,13 @@ def build_prompt(config: Config, decisions: list[Decision]) -> str:
     ).strip()
 
 
-def build_source_context(config: Config, decisions: list[Decision]) -> str:
+def build_source_context(config: Config, decisions: List[Decision]) -> str:
     return _build_source_context_impl(config, decisions)
 
 
 def auto_batch_decisions(
-    config: Config, decisions: list[Decision]
-) -> list[list[Decision]]:
+    config: Config, decisions: List[Decision]
+) -> List[List[Decision]]:
     """Split decisions into batches that fit within max_prompt_tokens.
 
     Uses a greedy approach: start with an empty batch, add decisions one by
@@ -1422,8 +1422,8 @@ def auto_batch_decisions(
         return []
 
     max_tokens = config.max_prompt_tokens
-    batches: list[list[Decision]] = []
-    current_batch: list[Decision] = []
+    batches: List[List[Decision]] = []
+    current_batch: List[Decision] = []
 
     for decision in decisions:
         trial = current_batch + [decision]
@@ -1442,8 +1442,8 @@ def auto_batch_decisions(
 
 
 def auto_batch_functions(
-    config: Config, functions: list[CFunction]
-) -> list[list[CFunction]]:
+    config: Config, functions: List[CFunction]
+) -> List[List[CFunction]]:
     """Split functions into batches that fit within max_prompt_tokens.
 
     Similar to auto_batch_decisions: build the prompt for each candidate
@@ -1454,14 +1454,14 @@ def auto_batch_functions(
 
     max_tokens = config.max_prompt_tokens
     # First, apply the existing per-file grouping and max_functions_per_prompt
-    pre_batches: list[list[CFunction]] = []
+    pre_batches: List[List[CFunction]] = []
     for batch in batch_functions(config, functions):
         pre_batches.append(batch)
 
     # Now further split any pre-batch that exceeds the token limit
-    result: list[list[CFunction]] = []
+    result: List[List[CFunction]] = []
     for pre_batch in pre_batches:
-        current_batch: list[CFunction] = []
+        current_batch: List[CFunction] = []
         for func in pre_batch:
             trial = current_batch + [func]
             batch_id = make_batch_id(trial, len(result) + 1)
@@ -1477,7 +1477,7 @@ def auto_batch_functions(
     return result
 
 
-def merge_test_files(test_sources: list[str], output_path: Path) -> Path:
+def merge_test_files(test_sources: List[str], output_path: Path) -> Path:
     """Merge multiple CUnit test source files into one unified file.
 
     Each input source may contain its own #include directives, test
@@ -1496,17 +1496,17 @@ def merge_test_files(test_sources: list[str], output_path: Path) -> Path:
         output_path.write_text(test_sources[0].rstrip() + "\n", encoding="utf-8")
         return output_path
 
-    all_includes: list[str] = []
-    all_bodies: list[str] = []
-    all_register_decls: list[str] = []
-    all_register_calls: list[str] = []
+    all_includes: List[str] = []
+    all_bodies: List[str] = []
+    all_register_decls: List[str] = []
+    all_register_calls: List[str] = []
     has_main = False
 
     for idx, source in enumerate(test_sources):
         lines = source.split("\n")
-        include_lines: list[str] = []
-        body_lines: list[str] = []
-        local_register_funcs: list[str] = []
+        include_lines: List[str] = []
+        body_lines: List[str] = []
+        local_register_funcs: List[str] = []
 
         for line in lines:
             stripped = line.strip()
@@ -1531,15 +1531,15 @@ def merge_test_files(test_sources: list[str], output_path: Path) -> Path:
             all_register_calls.append(f"    {func_name}();")
 
     # Deduplicate includes
-    seen_includes: set[str] = set()
-    unique_includes: list[str] = []
+    seen_includes: Set[str] = set()
+    unique_includes: List[str] = []
     for inc in all_includes:
         if inc not in seen_includes:
             seen_includes.add(inc)
             unique_includes.append(inc)
 
     # Build merged file
-    parts: list[str] = []
+    parts: List[str] = []
     parts.append("/* === Merged CUnit test file (auto-generated) === */\n")
     parts.append("\n".join(unique_includes))
     parts.append("\n")
@@ -1577,8 +1577,8 @@ def merge_test_files(test_sources: list[str], output_path: Path) -> Path:
     return output_path
 
 
-def _build_source_context_impl(config: Config, decisions: list[Decision]) -> str:
-    by_file: dict[str, list[int]] = {}
+def _build_source_context_impl(config: Config, decisions: List[Decision]) -> str:
+    by_file: Dict[str, List[int]] = {}
     for decision in decisions:
         by_file.setdefault(decision.file, []).append(decision.line)
 
@@ -1611,7 +1611,7 @@ def _build_source_context_impl(config: Config, decisions: list[Decision]) -> str
     return "\n\n".join(chunks)
 
 
-def build_function_prompt(config: Config, functions: list[CFunction], batch_id: str) -> str:
+def build_function_prompt(config: Config, functions: List[CFunction], batch_id: str) -> str:
     source_blob = build_function_source_context(config, functions)
     function_payload = []
     for function in functions:
@@ -1649,7 +1649,7 @@ def build_function_prompt(config: Config, functions: list[CFunction], batch_id: 
     functions_without_decisions = [f for f in functions if not f.decisions]
 
     # Generate truth tables for all decisions in this batch
-    all_decisions: list[Decision] = []
+    all_decisions: List[Decision] = []
     for function in functions:
         all_decisions.extend(function.decisions)
     truth_table_blob = "\n\n".join(
@@ -1739,7 +1739,7 @@ def build_function_prompt(config: Config, functions: list[CFunction], batch_id: 
     ).strip()
 
 
-def build_function_source_context(config: Config, functions: list[CFunction]) -> str:
+def build_function_source_context(config: Config, functions: List[CFunction]) -> str:
     chunks = []
     remaining = max(2000, config.llm_context_char_limit)
     for rel_file in sorted({function.file for function in functions}):
@@ -1769,8 +1769,8 @@ def build_function_source_context(config: Config, functions: list[CFunction]) ->
     return "\n\n".join(chunks)
 
 
-def merge_ranges(ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
-    merged: list[tuple[int, int]] = []
+def merge_ranges(ranges: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
+    merged: List[Tuple[int, int]] = []
     for start, end in sorted(ranges):
         if not merged or start > merged[-1][1] + 1:
             merged.append((start, end))
@@ -1780,11 +1780,11 @@ def merge_ranges(ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
     return merged
 
 
-def merge_line_windows(line_numbers: list[int], total_lines: int, radius: int) -> list[tuple[int, int]]:
+def merge_line_windows(line_numbers: List[int], total_lines: int, radius: int) -> List[Tuple[int, int]]:
     ranges = []
     for line in sorted(set(line_numbers)):
         ranges.append((max(1, line - radius), min(total_lines, line + radius)))
-    merged: list[tuple[int, int]] = []
+    merged: List[Tuple[int, int]] = []
     for start, end in ranges:
         if not merged or start > merged[-1][1] + 1:
             merged.append((start, end))
@@ -1824,7 +1824,7 @@ def truncate_prompt_to_token_limit(prompt: str, max_tokens: int, label: str = ""
     return truncated + notice
 
 
-def call_llm(config: Config, prompt: str, label: str = "") -> dict[str, Any]:
+def call_llm(config: Config, prompt: str, label: str = "") -> Dict[str, Any]:
     api_key = os.environ.get(config.llm_api_key_env)
     if not api_key:
         raise RuntimeError(f"environment variable {config.llm_api_key_env} is not set")
@@ -1880,7 +1880,7 @@ def strip_markdown_json_fence(content: str) -> str:
     return content.strip()
 
 
-def generate_function_tests(config: Config, functions: list[CFunction]) -> dict[str, Any]:
+def generate_function_tests(config: Config, functions: List[CFunction]) -> Dict[str, Any]:
     """Generate CUnit tests for all functions, auto-batching by token limit."""
     batches = auto_batch_functions(config, functions)
     return _generate_function_tests_from_batches(config, batches, functions)
@@ -1888,9 +1888,9 @@ def generate_function_tests(config: Config, functions: list[CFunction]) -> dict[
 
 def _generate_function_tests_from_batches(
     config: Config,
-    batches: list[list[CFunction]],
-    all_functions: list[CFunction],
-) -> dict[str, Any]:
+    batches: List[List[CFunction]],
+    all_functions: List[CFunction],
+) -> Dict[str, Any]:
     """Core implementation: generate CUnit tests for pre-computed batches."""
     ensure_parent(config.function_test_dir / "placeholder")
     generated_files = []
@@ -1955,9 +1955,9 @@ def _generate_function_tests_from_batches(
     return manifest
 
 
-def batch_functions(config: Config, functions: list[CFunction]) -> Iterable[list[CFunction]]:
+def batch_functions(config: Config, functions: List[CFunction]) -> Iterable[List[CFunction]]:
     max_per_batch = max(1, config.max_functions_per_prompt)
-    by_file: dict[str, list[CFunction]] = {}
+    by_file: Dict[str, List[CFunction]] = {}
     for function in functions:
         by_file.setdefault(function.file, []).append(function)
     for rel_file in sorted(by_file):
@@ -1966,7 +1966,7 @@ def batch_functions(config: Config, functions: list[CFunction]) -> Iterable[list
             yield items[start : start + max_per_batch]
 
 
-def make_batch_id(functions: list[CFunction], batch_index: int) -> str:
+def make_batch_id(functions: List[CFunction], batch_index: int) -> str:
     if functions:
         file_part = Path(functions[0].file).with_suffix("").as_posix()
         names = "_".join(function.name for function in functions[:2])
@@ -1986,7 +1986,7 @@ def safe_identifier(text: str) -> str:
     return value
 
 
-def write_cunit_runner(config: Config, generated_files: list[dict[str, Any]]) -> Path:
+def write_cunit_runner(config: Config, generated_files: List[Dict[str, Any]]) -> Path:
     ensure_parent(config.runner_output)
     declarations = []
     calls = []
@@ -2023,7 +2023,7 @@ def write_cunit_runner(config: Config, generated_files: list[dict[str, Any]]) ->
     return config.runner_output
 
 
-def run_command(command: str, cwd: Path) -> tuple[int, str]:
+def run_command(command: str, cwd: Path) -> Tuple[int, str]:
     started = time.time()
     proc = subprocess.run(
         command,
@@ -2038,7 +2038,7 @@ def run_command(command: str, cwd: Path) -> tuple[int, str]:
     return proc.returncode, header + proc.stdout
 
 
-def run_commands(commands: list[str], cwd: Path) -> list[dict[str, Any]]:
+def run_commands(commands: List[str], cwd: Path) -> List[Dict[str, Any]]:
     results = []
     for command in commands:
         code, output = run_command(command, cwd)
@@ -2048,8 +2048,8 @@ def run_commands(commands: list[str], cwd: Path) -> list[dict[str, Any]]:
     return results
 
 
-def parse_gcov_text(text: str) -> dict[str, Any]:
-    summary: dict[str, Any] = {}
+def parse_gcov_text(text: str) -> Dict[str, Any]:
+    summary: Dict[str, Any] = {}
     line_match = re.search(r"Lines executed:([0-9.]+)% of (\d+)", text)
     branch_match = re.search(r"Branches executed:([0-9.]+)% of (\d+)", text)
     taken_match = re.search(r"Taken at least once:([0-9.]+)% of (\d+)", text)
@@ -2065,7 +2065,7 @@ def parse_gcov_text(text: str) -> dict[str, Any]:
     return summary
 
 
-def collect_coverage_summary(config: Config, command_results: list[dict[str, Any]]) -> dict[str, Any]:
+def collect_coverage_summary(config: Config, command_results: List[Dict[str, Any]]) -> Dict[str, Any]:
     combined = "\n".join(item["output"] for item in command_results)
     summary = parse_gcov_text(combined)
     gcov_files = list(config.project_root.rglob("*.gcov"))
@@ -2081,15 +2081,15 @@ def collect_coverage_summary(config: Config, command_results: list[dict[str, Any
 
 def write_report(
     config: Config,
-    decisions: list[Decision],
-    llm_payload: dict[str, Any] | None,
-    build_results: list[dict[str, Any]],
-    test_results: list[dict[str, Any]],
-    coverage_results: list[dict[str, Any]],
-    coverage_summary: dict[str, Any],
-    functions: list[CFunction] | None = None,
-    function_manifest: dict[str, Any] | None = None,
-    mcdc_pairs: list[MCDCPair] | None = None,
+    decisions: List[Decision],
+    llm_payload: Optional[Dict[str, Any]],
+    build_results: List[Dict[str, Any]],
+    test_results: List[Dict[str, Any]],
+    coverage_results: List[Dict[str, Any]],
+    coverage_summary: Dict[str, Any],
+    functions: Optional[List[CFunction]] = None,
+    function_manifest: Optional[Dict[str, Any]] = None,
+    mcdc_pairs: Optional[List[MCDCPair]] = None,
 ) -> Path:
     report_path = config.test_output.with_suffix(".mcdc_report.json")
     html_path = report_path.with_suffix(".html")
@@ -2131,7 +2131,7 @@ def write_report(
     return report_path
 
 
-def command_group_status(results: list[dict[str, Any]]) -> str:
+def command_group_status(results: List[Dict[str, Any]]) -> str:
     if not results:
         return "skipped"
     if any(item.get("returncode") != 0 for item in results):
@@ -2139,7 +2139,7 @@ def command_group_status(results: list[dict[str, Any]]) -> str:
     return "passed"
 
 
-def render_html_report(report: dict[str, Any]) -> str:
+def render_html_report(report: Dict[str, Any]) -> str:
     coverage = report.get("coverage_summary", {})
     decisions = report.get("decisions", [])
     functions = report.get("functions", [])
@@ -2309,7 +2309,7 @@ def render_html_report(report: dict[str, Any]) -> str:
 </html>
 """
 
-def summarize_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def summarize_results(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     summarized = []
     for item in results:
         output = item["output"]
@@ -2411,7 +2411,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
     else:
         # Multiple batches: call LLM per batch, then merge
         print(f"prompt exceeds token limit, splitting into {len(batches)} batches")
-        test_sources: list[str] = []
+        test_sources: List[str] = []
         for idx, batch in enumerate(batches, start=1):
             prompt = build_prompt(config, batch)
             print(f"  batch {idx}/{len(batches)}: {len(batch)} decisions, "
@@ -2464,9 +2464,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     config = load_config(Path(args.config))
     decisions = discover_decisions(config)
     llm_payload = None
-    functions: list[CFunction] | None = None
-    function_manifest: dict[str, Any] | None = None
-    mcdc_pairs: list[MCDCPair] | None = None
+    functions: Optional[List[CFunction]] = None
+    function_manifest: Optional[Dict[str, Any]] = None
+    mcdc_pairs: Optional[List[MCDCPair]] = None
 
     if args.generate:
         batches = auto_batch_decisions(config, decisions)
@@ -2477,7 +2477,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             config.test_output.write_text(llm_payload["test_file"].rstrip() + "\n", encoding="utf-8")
         else:
             print(f"prompt exceeds token limit, splitting into {len(batches)} batches")
-            test_sources: list[str] = []
+            test_sources: List[str] = []
             for idx, batch in enumerate(batches, start=1):
                 prompt = build_prompt(config, batch)
                 print(f"  batch {idx}/{len(batches)}: {len(batch)} decisions, "
@@ -2506,8 +2506,8 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     build_results = run_commands(config.build_commands, config.project_root)
     if any(item["returncode"] != 0 for item in build_results):
-        test_results: list[dict[str, Any]] = []
-        coverage_results: list[dict[str, Any]] = []
+        test_results: List[Dict[str, Any]] = []
+        coverage_results: List[Dict[str, Any]] = []
     else:
         test_results = run_commands(config.test_commands, config.project_root)
         coverage_results = run_commands(config.coverage_commands, config.project_root)
@@ -2664,7 +2664,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
