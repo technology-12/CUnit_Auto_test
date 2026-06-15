@@ -1,0 +1,36 @@
+# ---- Secrets: NEVER commit real API keys ----
+APIKEY.txt
+*apikey*.txt
+!APIKEY.example.txt
+
+# ---- Claude Code session data ----
+.claude/
+
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+
+# ---- Generated CUnit test outputs (tool-generated, not source) ----
+work/tests/auto_mcdc_tests.*
+work/tests/auto_function_tests/
+work/tests/auto_cunit_runner.c
+
+# ---- Build / coverage artifacts ----
+*.exe
+*.o
+*.obj
+*.gcov
+*.gcda
+*.gcno
+*.lnk
+
+# ---- Generated MC/DC reports ----
+*.mcdc_report.json
+*.mcdc_report.html
+
+# ---- Editor / OS clutter ----
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

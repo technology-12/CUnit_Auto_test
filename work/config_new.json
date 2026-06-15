@@ -1,0 +1,24 @@
+{
+  "project_root": "./work",
+  "source_globs": [
+    "src/**/*.c",
+    "include/**/*.h"
+  ],
+  "include_dirs": [
+    "include",
+    "src"
+  ],
+  "test_output": "tests/auto_mcdc_tests.c",
+  "build_commands": [],
+  "test_commands": [],
+  "coverage_commands": [],
+  "llm_base_url": "https://open.bigmodel.cn/api/paas/v4",
+  "llm_api_key_env": "OPENAI_API_KEY",
+  "llm_model": "glm-5.1",
+  "max_llm_rounds": 1,
+  "extra_prompt": "Prefer testing public APIs. All source files live under src/. Include headers from include/ and src/. Use CUnit/Basic.h.",
+  "auto_build": true,
+  "compiler": "gcc",
+  "cunit_include_dir": "",
+  "cunit_lib_dir": ""
+}

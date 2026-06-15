@@ -1,0 +1,7 @@
+# APIKEY 配置文件示例 —— 复制本文件为 APIKEY.txt 并填入你的真实配置。
+# APIKEY.txt 已被 .gitignore 忽略，不会被提交到 git，可安全存放密钥。
+# 解析器同时支持「前缀格式」(推荐，见下) 与「裸格式」(一行 key、一行 URL、可选一行 model)。
+
+URL: https://open.bigmodel.cn/api/paas/v4
+MODEL: glm-5.1
+API-KEY: 在此粘贴你的 API Key
